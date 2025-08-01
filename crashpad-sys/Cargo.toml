@@ -1,0 +1,22 @@
+[package]
+name = "crashpad-sys"
+version = { workspace = true }
+authors = { workspace = true }
+edition = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+rust-version = { workspace = true }
+description = "Low-level FFI bindings to Google Crashpad"
+links = "crashpad"
+
+[dependencies]
+
+[build-dependencies]
+bindgen = "0.69"
+cc = "1.0"
+cmake = "0.1"
+
+[features]
+default = []
+# Enable building with depot_tools (required for first build)
+depot-tools = []
