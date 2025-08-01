@@ -9,7 +9,7 @@ Rust wrapper for Google Crashpad crash reporting library with cross-platform sup
 ### Architecture
 - `crashpad-sys`: Low-level FFI bindings using bindgen
 - `crashpad`: Safe Rust API wrapper
-- `third_party/crashpad`: Google Crashpad as git submodule
+- `third_party/`: Dependencies managed by build.rs (not git submodules)
 
 ## Build Requirements
 
@@ -21,26 +21,43 @@ Rust wrapper for Google Crashpad crash reporting library with cross-platform sup
 2. **Build dependencies**
    - C/C++ compiler (gcc/clang)
    - bindgen dependencies
+   - git (for cloning dependencies)
    - Platform-specific SDKs (Android NDK for Android builds)
 
 ## Common Commands
 
 ```bash
-# Build the project
+# Build the project (will auto-clone dependencies)
 cargo build --package crashpad-sys
 cargo build --package crashpad
 
-# Sync Crashpad dependencies
-cd third_party/crashpad
-gclient sync
+# Clean build
+rm -rf third_party && cargo clean
+cargo build
 ```
+
+## Development History
+
+### Phase 1: Initial Setup with Submodules (Failed)
+- Tried using Crashpad as git submodule
+- Issue: Crashpad expects gclient to manage dependencies
+- mini_chromium and other deps were not properly synced
+
+### Phase 2: build.rs Managed Dependencies (Current)
+- Removed submodules approach
+- build.rs now clones and manages all dependencies:
+  - Crashpad
+  - mini_chromium (to correct nested path)
+  - googletest
+  - linux-syscall-support
+- Added `/third_party/` to .gitignore
 
 ## Current Issues (WIP)
 
-1. **mini_chromium dependency**: gclient sync not properly fetching mini_chromium subdirectory
-   - Expected: `third_party/mini_chromium/mini_chromium/`
-   - Actual: Only `third_party/mini_chromium/` exists
-   - Need to fix gclient configuration
+1. **gn checkout detection**: 
+   - Error: "Could not find checkout in any parent of the current path"
+   - gn expects depot_tools style checkout
+   - May need buildtools or .gclient setup
 
 ## Platform Support
 
@@ -53,5 +70,8 @@ gclient sync
 ## Development Notes
 
 - Using standard Rust FFI pattern: `-sys` crate for raw bindings, main crate for safe wrapper
-- build.rs handles cross-platform Crashpad compilation using gn/ninja
+- build.rs handles:
+  - Cloning all dependencies to correct locations
+  - Cross-platform Crashpad compilation using gn/ninja
 - bindgen generates FFI bindings from wrapper.h
+- CargoCallbacks deprecation warning can be fixed by using `CargoCallbacks::new()`

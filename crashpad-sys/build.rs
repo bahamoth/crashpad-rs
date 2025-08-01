@@ -1,6 +1,73 @@
 use std::env;
+use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+
+fn clone_repository(url: &str, target: &Path, commit: Option<&str>) {
+    if !target.exists() {
+        println!("Cloning {} to {}", url, target.display());
+        
+        let status = Command::new("git")
+            .args(&["clone", url, target.to_str().unwrap()])
+            .status()
+            .expect("Failed to clone repository");
+        
+        if !status.success() {
+            panic!("Failed to clone {}", url);
+        }
+        
+        if let Some(commit) = commit {
+            let status = Command::new("git")
+                .args(&["checkout", commit])
+                .current_dir(target)
+                .status()
+                .expect("Failed to checkout commit");
+            
+            if !status.success() {
+                panic!("Failed to checkout commit {}", commit);
+            }
+        }
+    }
+}
+
+fn setup_crashpad_deps(workspace_root: &Path) {
+    let third_party = workspace_root.join("third_party");
+    fs::create_dir_all(&third_party).unwrap();
+    
+    // Clone Crashpad
+    let crashpad_dir = third_party.join("crashpad");
+    clone_repository(
+        "https://chromium.googlesource.com/crashpad/crashpad",
+        &crashpad_dir,
+        None
+    );
+    
+    // Clone mini_chromium to the expected location
+    let mini_chromium_dir = crashpad_dir.join("third_party/mini_chromium/mini_chromium");
+    fs::create_dir_all(mini_chromium_dir.parent().unwrap()).unwrap();
+    clone_repository(
+        "https://chromium.googlesource.com/chromium/mini_chromium",
+        &mini_chromium_dir,
+        Some("4e79cec054005026ef28a4c7c3a22ef31740b897") // From DEPS
+    );
+    
+    // Clone other required dependencies
+    let googletest_dir = crashpad_dir.join("third_party/googletest/googletest");
+    fs::create_dir_all(googletest_dir.parent().unwrap()).unwrap();
+    clone_repository(
+        "https://chromium.googlesource.com/external/github.com/google/googletest",
+        &googletest_dir,
+        Some("3983f67e32fb3e9294487b9d4f9586efa6e5d088") // From DEPS
+    );
+    
+    let lss_dir = crashpad_dir.join("third_party/lss/lss");
+    fs::create_dir_all(lss_dir.parent().unwrap()).unwrap();
+    clone_repository(
+        "https://chromium.googlesource.com/linux-syscall-support",
+        &lss_dir,
+        Some("9719c1e1e676814c456b55f5f070eabad6709d31") // From DEPS
+    );
+}
 
 fn get_depot_tools_path() -> PathBuf {
     // Try from environment variable first
@@ -34,6 +101,10 @@ fn main() {
     let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
     let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
     let workspace_root = manifest_dir.parent().unwrap();
+    
+    // Setup Crashpad and its dependencies
+    setup_crashpad_deps(&workspace_root);
+    
     let crashpad_dir = workspace_root.join("third_party/crashpad");
     
     // Detect target platform
