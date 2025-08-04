@@ -17,4 +17,6 @@ tempfile = "3.8"
 libc = "0.2"
 
 [features]
-default = []
+default = ["bundled"]
+bundled = []  # Bundle crashpad_handler with the application
+system = []   # Use system-installed crashpad_handler

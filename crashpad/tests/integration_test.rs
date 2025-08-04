@@ -5,11 +5,11 @@ use tempfile::TempDir;
 
 #[test]
 fn test_client_new_and_drop() {
-    // 클라이언트를 생성하고 정상적으로 삭제되는지 확인
+    // Create client and verify proper cleanup
     let client = CrashpadClient::new();
     assert!(client.is_ok());
     
-    // Drop은 자동으로 호출됨
+    // Drop is called automatically
     drop(client);
 }
 
@@ -17,22 +17,22 @@ fn test_client_new_and_drop() {
 fn test_start_handler() {
     let client = CrashpadClient::new().expect("Failed to create client");
     
-    // 임시 디렉토리 생성
+    // Create temporary directory
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
     let database_path = temp_dir.path().join("crashpad_db");
     let metrics_path = temp_dir.path().join("crashpad_metrics");
     
-    // 디렉토리 미리 생성
+    // Pre-create directories
     std::fs::create_dir_all(&database_path).ok();
     std::fs::create_dir_all(&metrics_path).ok();
     
-    // 빌드된 handler 경로 찾기
+    // Find built handler path
     let handler_path = find_crashpad_handler();
     
-    // 빈 annotations로 시작
+    // Start with empty annotations
     let annotations = HashMap::new();
     
-    // 핸들러 시작 (URL 없이 로컬 전용)
+    // Start handler (local only, no URL)
     let result = client.start_handler(
         &handler_path,
         &database_path,
@@ -41,13 +41,13 @@ fn test_start_handler() {
         &annotations,
     );
     
-    // 실제 핸들러 파일이 존재하는지 확인
+    // Check if handler file exists
     if handler_path.exists() {
-        // 핸들러가 존재하면 성공해야 함
+        // Should succeed if handler exists
         assert!(result.is_ok(), "Handler should start successfully with valid path");
         println!("Handler started successfully");
     } else {
-        // 핸들러가 없으면 실패할 수도 있음 (Crashpad 구현에 따라 다름)
+        // May fail if handler is missing (depends on Crashpad implementation)
         println!("Handler path doesn't exist, result: {:?}", result);
     }
 }
@@ -56,13 +56,13 @@ fn test_start_handler() {
 fn test_invalid_paths() {
     let client = CrashpadClient::new().expect("Failed to create client");
     
-    // 존재하지 않는 핸들러 경로
+    // Non-existent handler path
     let invalid_handler = PathBuf::from("/nonexistent/crashpad_handler");
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
     let database_path = temp_dir.path().join("crashpad_db");
     let metrics_path = temp_dir.path().join("crashpad_metrics");
     
-    // 디렉토리 미리 생성
+    // Pre-create directories
     std::fs::create_dir_all(&database_path).expect("Failed to create database dir");
     std::fs::create_dir_all(&metrics_path).expect("Failed to create metrics dir");
     
@@ -80,9 +80,9 @@ fn test_invalid_paths() {
         &annotations,
     );
     
-    // 참고: Crashpad는 핸들러 시작을 비동기로 처리할 수 있어서
-    // 잘못된 경로에서도 즉시 실패를 반환하지 않을 수 있음
-    // 실제 핸들러 프로세스는 나중에 실패함
+    // Note: Crashpad may process handler startup asynchronously
+    // so it may not return failure immediately for invalid paths
+    // The actual handler process will fail later
     println!("Result with invalid path: {:?}", result);
 }
 
@@ -94,13 +94,13 @@ fn test_with_annotations() {
     let database_path = temp_dir.path().join("crashpad_db");
     let metrics_path = temp_dir.path().join("crashpad_metrics");
     
-    // 디렉토리 미리 생성
+    // Pre-create directories
     std::fs::create_dir_all(&database_path).ok();
     std::fs::create_dir_all(&metrics_path).ok();
     
     let handler_path = find_crashpad_handler();
     
-    // 여러 annotation 추가
+    // Add multiple annotations
     let mut annotations = HashMap::new();
     annotations.insert("version".to_string(), "1.0.0".to_string());
     annotations.insert("build".to_string(), "debug".to_string());
@@ -122,7 +122,7 @@ fn test_with_annotations() {
 
 // Helper function to find the built crashpad_handler
 fn find_crashpad_handler() -> PathBuf {
-    // 먼저 빌드된 위치에서 찾기
+    // First look in build location
     let possible_paths = vec![
         PathBuf::from("../third_party/crashpad_checkout/crashpad/out/linux-x86_64/crashpad_handler"),
         PathBuf::from("third_party/crashpad_checkout/crashpad/out/linux-x86_64/crashpad_handler"),
@@ -135,6 +135,6 @@ fn find_crashpad_handler() -> PathBuf {
         }
     }
     
-    // 찾을 수 없으면 더미 경로 반환 (테스트는 실패할 것임)
+    // Return dummy path if not found (test will fail)
     PathBuf::from("crashpad_handler")
 }

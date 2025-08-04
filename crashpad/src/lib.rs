@@ -3,8 +3,10 @@
 //! This crate provides a safe, idiomatic Rust interface to the Crashpad crash reporting library.
 
 mod client;
+mod config;
 
 pub use client::CrashpadClient;
+pub use config::{CrashpadConfig, CrashpadConfigBuilder};
 use thiserror::Error;
 
 #[derive(Error, Debug)]

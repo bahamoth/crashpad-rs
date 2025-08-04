@@ -41,7 +41,7 @@ bool crashpad_client_start_handler(
     
     std::vector<std::string> arguments;
     bool restartable = true;
-    bool asynchronous_start = true;  // 비동기로 시작하여 hang 방지
+    bool asynchronous_start = true;  // Start asynchronously to prevent hanging
     
     return crashpad_client->StartHandler(
         handler,
@@ -62,6 +62,24 @@ bool crashpad_client_set_handler_ipc_pipe(
     
     auto* crashpad_client = static_cast<CrashpadClient*>(client);
     return crashpad_client->SetHandlerIPCPipe(ipc_pipe);
+}
+#endif
+
+#if defined(__APPLE__)
+bool crashpad_client_set_handler_mach_service(
+    crashpad_client_t client,
+    const char* service_name) {
+    
+    auto* crashpad_client = static_cast<CrashpadClient*>(client);
+    return crashpad_client->SetHandlerMachService(service_name);
+}
+
+bool crashpad_client_use_system_default_handler(
+    crashpad_client_t client) {
+    
+    auto* crashpad_client = static_cast<CrashpadClient*>(client);
+    crashpad_client->UseSystemDefaultHandler();
+    return true;  // This method returns void in Crashpad
 }
 #endif
 

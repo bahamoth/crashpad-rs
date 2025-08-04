@@ -3,7 +3,7 @@ use std::path::Path;
 use std::ptr;
 use std::collections::HashMap;
 
-use crate::{Result, CrashpadError};
+use crate::{Result, CrashpadError, CrashpadConfig};
 
 // Import FFI bindings
 use crashpad_sys::*;
@@ -21,6 +21,37 @@ impl CrashpadClient {
             return Err(CrashpadError::InitializationFailed);
         }
         Ok(CrashpadClient { handle })
+    }
+    
+    /// Starts the Crashpad handler with a configuration.
+    pub fn start_with_config(
+        &self,
+        config: &CrashpadConfig,
+        annotations: &HashMap<String, String>,
+    ) -> Result<()> {
+        // Get handler path (with fallback to same directory)
+        let handler_path = config.handler_path()?;
+        
+        // Get paths
+        let database_path = config.database_path();
+        let metrics_path = config.metrics_path();
+        let url = config.url();
+        
+        // Ensure directories exist
+        if let Some(parent) = database_path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        if let Some(parent) = metrics_path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        
+        self.start_handler(
+            &handler_path,
+            database_path,
+            metrics_path,
+            url,
+            annotations,
+        )
     }
     
     /// Starts the Crashpad handler process.
@@ -105,6 +136,38 @@ impl CrashpadClient {
         
         let success = unsafe {
             crashpad_client_set_handler_ipc_pipe(self.handle, wide.as_ptr())
+        };
+        
+        if success {
+            Ok(())
+        } else {
+            Err(CrashpadError::HandlerStartFailed)
+        }
+    }
+    
+    /// Sets the handler Mach service (macOS/iOS only).
+    #[cfg(any(target_os = "macos", target_os = "ios"))]
+    pub fn set_handler_mach_service(&self, service_name: &str) -> Result<()> {
+        let service_name_c = CString::new(service_name).map_err(|_| {
+            CrashpadError::InvalidConfiguration("Invalid service name".to_string())
+        })?;
+        
+        let success = unsafe {
+            crashpad_client_set_handler_mach_service(self.handle, service_name_c.as_ptr())
+        };
+        
+        if success {
+            Ok(())
+        } else {
+            Err(CrashpadError::HandlerStartFailed)
+        }
+    }
+    
+    /// Use system default crash handler (macOS only).
+    #[cfg(target_os = "macos")]
+    pub fn use_system_default_handler(&self) -> Result<()> {
+        let success = unsafe {
+            crashpad_client_use_system_default_handler(self.handle)
         };
         
         if success {

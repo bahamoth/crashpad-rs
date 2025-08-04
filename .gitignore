@@ -6,3 +6,23 @@
 
 # IDE
 .idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Crashpad runtime directories
+/crashpad_database/
+/crashpad_metrics/
+
+# Build artifacts
+/dist/
+
+# OS specific
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.bak
+

@@ -37,6 +37,18 @@ bool crashpad_client_set_handler_ipc_pipe(
     const wchar_t* ipc_pipe);
 #endif
 
+// Platform-specific functions for macOS/iOS
+#if defined(__APPLE__)
+// Set handler for macOS/iOS using mach port
+bool crashpad_client_set_handler_mach_service(
+    crashpad_client_t client,
+    const char* service_name);
+
+// Use system crash reporter on macOS
+bool crashpad_client_use_system_default_handler(
+    crashpad_client_t client);
+#endif
+
 #ifdef __cplusplus
 }
 #endif
