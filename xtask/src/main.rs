@@ -280,4 +280,3 @@ fn detect_platform() -> (&'static str, &'static str) {
 
     (os, arch)
 }
-

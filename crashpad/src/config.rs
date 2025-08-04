@@ -58,28 +58,38 @@ impl CrashpadConfig {
 
     /// Get the handler path
     pub(crate) fn handler_path(&self) -> Result<PathBuf> {
-        if !self.handler_path.as_os_str().is_empty() {
-            return Ok(self.handler_path.clone());
+        // iOS/tvOS/watchOS use in-process handler, no external handler needed
+        #[cfg(any(target_os = "ios", target_os = "tvos", target_os = "watchos"))]
+        {
+            // Return empty path for iOS - it's handled in-process
+            return Ok(PathBuf::new());
         }
 
-        // Fallback: look in same directory as executable
-        if let Ok(exe_path) = env::current_exe() {
-            if let Some(exe_dir) = exe_path.parent() {
-                let handler_name = if cfg!(windows) {
-                    "crashpad_handler.exe"
-                } else {
-                    "crashpad_handler"
-                };
-                let handler_path = exe_dir.join(handler_name);
-                if handler_path.exists() {
-                    return Ok(handler_path);
+        #[cfg(not(any(target_os = "ios", target_os = "tvos", target_os = "watchos")))]
+        {
+            if !self.handler_path.as_os_str().is_empty() {
+                return Ok(self.handler_path.clone());
+            }
+
+            // Fallback: look in same directory as executable
+            if let Ok(exe_path) = env::current_exe() {
+                if let Some(exe_dir) = exe_path.parent() {
+                    let handler_name = if cfg!(windows) {
+                        "crashpad_handler.exe"
+                    } else {
+                        "crashpad_handler"
+                    };
+                    let handler_path = exe_dir.join(handler_name);
+                    if handler_path.exists() {
+                        return Ok(handler_path);
+                    }
                 }
             }
-        }
 
-        Err(CrashpadError::InvalidConfiguration(
-            "Handler not found. Specify handler_path or place crashpad_handler in same directory as executable".to_string()
-        ))
+            Err(CrashpadError::InvalidConfiguration(
+                "Handler not found. Specify handler_path or place crashpad_handler in same directory as executable".to_string()
+            ))
+        }
     }
 
     pub(crate) fn database_path(&self) -> &Path {

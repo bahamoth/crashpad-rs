@@ -83,4 +83,43 @@ bool crashpad_client_use_system_default_handler(
 }
 #endif
 
+#if defined(__APPLE__) && defined(TARGET_OS_IOS) && TARGET_OS_IOS
+bool crashpad_client_start_in_process_handler(
+    crashpad_client_t client,
+    const char* database_path,
+    const char* url,
+    const char** annotations_keys,
+    const char** annotations_values,
+    size_t annotations_count) {
+    
+    auto* crashpad_client = static_cast<CrashpadClient*>(client);
+    
+    base::FilePath database(database_path);
+    std::string url_str(url ? url : "");
+    
+    std::map<std::string, std::string> annotations;
+    for (size_t i = 0; i < annotations_count; i++) {
+        annotations[annotations_keys[i]] = annotations_values[i];
+    }
+    
+    // Empty callback for now
+    CrashpadClient::ProcessPendingReportsObservationCallback callback;
+    
+    return CrashpadClient::StartCrashpadInProcessHandler(
+        database,
+        url_str,
+        annotations,
+        callback
+    );
+}
+
+void crashpad_client_process_intermediate_dumps() {
+    CrashpadClient::ProcessIntermediateDumps();
+}
+
+void crashpad_client_start_processing_pending_reports() {
+    CrashpadClient::StartProcessingPendingReports();
+}
+#endif
+
 } // extern "C"

@@ -30,7 +30,14 @@ cargo build --package crashpad-sys
 cargo build --package crashpad
 
 # Clean build
-rm -rf third_party && cargo clean
+make clean  # This cleans the native build artifacts
+cargo build
+
+# Build for iOS Simulator
+cargo build --target aarch64-apple-ios-sim --example ios_simulator_test
+
+# When build fails with link errors, clean and rebuild
+make clean  # This cleans the native build artifacts
 cargo build
 ```
 
@@ -63,11 +70,16 @@ cargo build
 
 ## Platform Support
 
-- macOS (x64)
-- iOS (arm64, x64)
+- macOS (x64, arm64)
+- iOS (arm64, x64) - Uses in-process handler, no separate handler executable
 - Linux (x64)
 - Android (arm, arm64, x86, x64)
 - Windows (x64)
+
+### iOS Specifics
+- iOS uses an in-process crash handler (no separate crashpad_handler executable)
+- The handler runs within the same process as the application
+- No handler path configuration needed for iOS targets
 
 ## Development Notes
 

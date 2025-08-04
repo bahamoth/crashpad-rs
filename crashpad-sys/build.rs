@@ -94,6 +94,8 @@ fn main() {
         println!("cargo:warning=Running gclient sync...");
         Command::new("gclient")
             .arg("sync")
+            .arg("--no-history")
+            .arg("-D") // Delete unmanaged files
             .current_dir(&crashpad_checkout)
             .env("PATH", &path)
             .status()
@@ -101,6 +103,7 @@ fn main() {
     }
 
     // Detect target platform
+    let target = env::var("TARGET").unwrap();
     let target_os = env::var("CARGO_CFG_TARGET_OS").unwrap();
     let target_arch = env::var("CARGO_CFG_TARGET_ARCH").unwrap();
     let target_env = env::var("CARGO_CFG_TARGET_ENV").unwrap_or_default();
@@ -142,6 +145,13 @@ fn main() {
                 "x86_64" => gn_args.push("target_cpu=\"x64\"".to_string()),
                 _ => panic!("Unsupported iOS arch: {target_arch}"),
             }
+            // iOS specific settings from Crashpad's setup_ios_gn.py
+            gn_args.push("ios_enable_code_signing=false".to_string());
+            if target.contains("sim") {
+                // iOS Simulator settings
+                gn_args.push("target_environment=\"simulator\"".to_string());
+                gn_args.push("target_platform=\"iphoneos\"".to_string());
+            }
         }
         "windows" => {
             gn_args.push("target_cpu=\"x64\"".to_string());
@@ -155,7 +165,11 @@ fn main() {
     let args_str = gn_args.join(" ");
 
     // Separate build directory by target
-    let build_name = format!("{target_os}-{target_arch}");
+    let build_name = if target_os == "ios" && target.contains("sim") {
+        format!("{target_os}-sim-{target_arch}")
+    } else {
+        format!("{target_os}-{target_arch}")
+    };
     let build_dir = crashpad_dir.join("out").join(&build_name);
 
     // gn gen
@@ -173,12 +187,35 @@ fn main() {
 
     // ninja
     println!("cargo:warning=Running ninja...");
-    Command::new("ninja")
-        .args(["-C", build_dir.to_str().unwrap()])
+
+    let mut ninja_cmd = Command::new("ninja");
+    ninja_cmd
+        .arg("-C")
+        .arg(build_dir.to_str().unwrap())
         .current_dir(&crashpad_dir)
-        .env("PATH", &path)
-        .status()
-        .expect("Failed to run ninja");
+        .env("PATH", &path);
+
+    // For iOS, we need to build specific static library targets
+    if target_os == "ios" {
+        ninja_cmd.args([
+            "client:client",
+            "client:common",
+            "handler:common", // For upload thread
+            "util:util",
+            "util:net", // For HTTPTransport
+            "util:mig_output",
+            "minidump:format",
+            "minidump:minidump",
+            "snapshot:context",
+            "snapshot:snapshot",
+            "third_party/mini_chromium/mini_chromium/base:base",
+        ]);
+    }
+
+    let status = ninja_cmd.status().expect("Failed to run ninja");
+    if !status.success() {
+        panic!("ninja build failed");
+    }
 
     // Compile wrapper.cc
     println!("cargo:warning=Compiling wrapper.cc...");
@@ -211,13 +248,29 @@ fn main() {
             cc_cmd.args(["-DCRASHPAD_MACOS", "-DOS_MACOSX=1"]);
         }
         "ios" => {
-            cc_cmd.args(["-fPIC", "-mios-version-min=9.0"]);
+            cc_cmd.arg("-fPIC");
             // iOS specific defines
-            cc_cmd.args(["-DCRASHPAD_IOS", "-DOS_IOS=1"]);
-            if target_arch == "aarch64" {
-                cc_cmd.arg("-arch").arg("arm64");
-            } else if target_arch == "x86_64" {
-                cc_cmd.arg("-arch").arg("x86_64");
+            cc_cmd.args(["-DCRASHPAD_IOS", "-DOS_IOS=1", "-DTARGET_OS_IOS=1"]);
+
+            // Handle iOS simulator vs device targets
+            if target.contains("sim") {
+                // iOS Simulator
+                cc_cmd.arg("-target");
+                if target_arch == "aarch64" {
+                    cc_cmd.arg("arm64-apple-ios14.0-simulator");
+                } else {
+                    cc_cmd.arg("x86_64-apple-ios14.0-simulator");
+                }
+                cc_cmd.arg("-mios-simulator-version-min=14.0");
+            } else {
+                // iOS Device
+                cc_cmd.arg("-target");
+                if target_arch == "aarch64" {
+                    cc_cmd.arg("arm64-apple-ios14.0");
+                } else {
+                    cc_cmd.arg("armv7-apple-ios14.0");
+                }
+                cc_cmd.arg("-miphoneos-version-min=14.0");
             }
         }
         "android" => {
@@ -240,9 +293,23 @@ fn main() {
     }
 
     // bindgen
-    let bindings = bindgen::Builder::default()
+    let mut bindgen_builder = bindgen::Builder::default()
         .header("wrapper.h")
-        .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()))
+        .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()));
+
+    // For iOS simulator, specify the correct target triple
+    if target_os == "ios" && target.contains("sim") {
+        bindgen_builder =
+            bindgen_builder
+                .clang_arg("-target")
+                .clang_arg(if target_arch == "aarch64" {
+                    "arm64-apple-ios-simulator"
+                } else {
+                    "x86_64-apple-ios-simulator"
+                });
+    }
+
+    let bindings = bindgen_builder
         .generate()
         .expect("Unable to generate bindings");
 
@@ -287,16 +354,41 @@ fn main() {
 
     let ar_status = match target_os.as_str() {
         "macos" | "ios" => {
-            // macOS/iOS uses libtool
-            Command::new("libtool")
-                .args([
+            // For iOS, combine wrapper with handler:common and util:net to avoid linking issues
+            if target_os == "ios" {
+                let handler_common = obj_dir.join("handler/libcommon.a");
+                let util_net = obj_dir.join("util/libnet.a");
+
+                let mut libtool_args = vec![
                     "-static",
                     "-o",
                     lib_path.to_str().unwrap(),
                     wrapper_obj.to_str().unwrap(),
-                ])
-                .status()
-                .expect("Failed to create static library with libtool")
+                ];
+
+                if handler_common.exists() {
+                    libtool_args.push(handler_common.to_str().unwrap());
+                }
+                if util_net.exists() {
+                    libtool_args.push(util_net.to_str().unwrap());
+                }
+
+                Command::new("libtool")
+                    .args(&libtool_args)
+                    .status()
+                    .expect("Failed to create combined static library with libtool")
+            } else {
+                // macOS uses libtool normally
+                Command::new("libtool")
+                    .args([
+                        "-static",
+                        "-o",
+                        lib_path.to_str().unwrap(),
+                        wrapper_obj.to_str().unwrap(),
+                    ])
+                    .status()
+                    .expect("Failed to create static library with libtool")
+            }
         }
         _ => {
             // Linux and others use ar
@@ -363,6 +455,7 @@ fn main() {
         }
         "ios" => {
             println!("cargo:rustc-link-lib=c++");
+            println!("cargo:rustc-link-lib=z"); // zlib for compression
             println!("cargo:rustc-link-lib=framework=Foundation");
             println!("cargo:rustc-link-lib=framework=Security");
             println!("cargo:rustc-link-lib=framework=CoreFoundation");

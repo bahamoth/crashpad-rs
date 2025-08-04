@@ -47,6 +47,21 @@ bool crashpad_client_set_handler_mach_service(
 // Use system crash reporter on macOS
 bool crashpad_client_use_system_default_handler(
     crashpad_client_t client);
+
+// iOS-specific in-process handler functions
+#if defined(TARGET_OS_IOS) && TARGET_OS_IOS
+bool crashpad_client_start_in_process_handler(
+    crashpad_client_t client,
+    const char* database_path,
+    const char* url,
+    const char** annotations_keys,
+    const char** annotations_values,
+    size_t annotations_count);
+
+void crashpad_client_process_intermediate_dumps();
+
+void crashpad_client_start_processing_pending_reports();
+#endif
 #endif
 
 #ifdef __cplusplus
