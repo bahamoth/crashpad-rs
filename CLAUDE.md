@@ -13,16 +13,14 @@ Rust wrapper for Google Crashpad crash reporting library with cross-platform sup
 
 ## Build Requirements
 
-1. **depot_tools** (required for gn and ninja)
-   ```bash
-   export PATH=$HOME/projects/depot_tools:$PATH
-   ```
-
-2. **Build dependencies**
+1. **Build dependencies**
    - C/C++ compiler (gcc/clang)
-   - bindgen dependencies
+   - bindgen dependencies (libclang)
    - git (for cloning dependencies)
+   - Python (for depot_tools)
    - Platform-specific SDKs (Android NDK for Android builds)
+
+Note: depot_tools is automatically downloaded to `third_party/depot_tools` during the build process.
 
 ## Common Commands
 
@@ -45,19 +43,23 @@ cargo build
 
 ### Phase 2: build.rs Managed Dependencies (Current)
 - Removed submodules approach
-- build.rs now clones and manages all dependencies:
-  - Crashpad
-  - mini_chromium (to correct nested path)
-  - googletest
-  - linux-syscall-support
+- build.rs now manages all dependencies:
+  - depot_tools (automatically cloned to third_party/)
+  - Crashpad (using proper gclient workflow)
+  - All Crashpad dependencies via gclient sync
+- Uses proper Chromium build workflow:
+  - Creates .gclient configuration
+  - Uses gclient sync for dependency management
+  - Generates build files with gn
+  - Builds with ninja
 - Added `/third_party/` to .gitignore
 
-## Current Issues (WIP)
+## Current Status
 
-1. **gn checkout detection**: 
-   - Error: "Could not find checkout in any parent of the current path"
-   - gn expects depot_tools style checkout
-   - May need buildtools or .gclient setup
+- Proper Chromium-style build system implemented
+- depot_tools automatically managed in third_party/
+- Crashpad built using official gclient/gn/ninja workflow
+- Cross-platform support for macOS, iOS, Linux, Android, Windows
 
 ## Platform Support
 

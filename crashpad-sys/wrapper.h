@@ -3,29 +3,42 @@
 #ifndef CRASHPAD_WRAPPER_H
 #define CRASHPAD_WRAPPER_H
 
-// Include main Crashpad client headers
-#include "client/crashpad_client.h"
-#include "client/settings.h"
-#include "client/crash_report_database.h"
-#include "client/crashpad_info.h"
+#include <stdbool.h>
+#include <stddef.h>
 
-// Include annotation headers
-#include "client/annotation.h"
-#include "client/annotation_list.h"
-
-// Include handler headers for configuration
-#include "handler/handler_main.h"
-
-// Platform-specific includes
-#ifdef OS_MACOSX
-#include "client/simulate_crash_mac.h"
+#ifdef __cplusplus
+extern "C" {
 #endif
 
-#ifdef OS_WIN
-#include "client/crashpad_info.h"
+// Opaque handle for CrashpadClient
+typedef void* crashpad_client_t;
+
+// Create a new CrashpadClient instance
+crashpad_client_t crashpad_client_new();
+
+// Delete a CrashpadClient instance
+void crashpad_client_delete(crashpad_client_t client);
+
+// Start the Crashpad handler
+bool crashpad_client_start_handler(
+    crashpad_client_t client,
+    const char* handler_path,
+    const char* database_path,
+    const char* metrics_path,
+    const char* url,
+    const char** annotations_keys,
+    const char** annotations_values,
+    size_t annotations_count);
+
+// Set handler IPC pipe (for Windows)
+#ifdef _WIN32
+bool crashpad_client_set_handler_ipc_pipe(
+    crashpad_client_t client,
+    const wchar_t* ipc_pipe);
 #endif
 
-// Minidump related headers
-#include "minidump/minidump_file_writer.h"
+#ifdef __cplusplus
+}
+#endif
 
 #endif // CRASHPAD_WRAPPER_H

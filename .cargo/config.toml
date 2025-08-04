@@ -1,3 +1,0 @@
-[env]
-# Set depot_tools path for build scripts
-DEPOT_TOOLS_PATH = "$HOME/projects/depot_tools"

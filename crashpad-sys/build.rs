@@ -1,98 +1,6 @@
 use std::env;
-use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::process::Command;
-
-fn clone_repository(url: &str, target: &Path, commit: Option<&str>) {
-    if !target.exists() {
-        println!("Cloning {} to {}", url, target.display());
-        
-        let status = Command::new("git")
-            .args(&["clone", url, target.to_str().unwrap()])
-            .status()
-            .expect("Failed to clone repository");
-        
-        if !status.success() {
-            panic!("Failed to clone {}", url);
-        }
-        
-        if let Some(commit) = commit {
-            let status = Command::new("git")
-                .args(&["checkout", commit])
-                .current_dir(target)
-                .status()
-                .expect("Failed to checkout commit");
-            
-            if !status.success() {
-                panic!("Failed to checkout commit {}", commit);
-            }
-        }
-    }
-}
-
-fn setup_crashpad_deps(workspace_root: &Path) {
-    let third_party = workspace_root.join("third_party");
-    fs::create_dir_all(&third_party).unwrap();
-    
-    // Clone Crashpad
-    let crashpad_dir = third_party.join("crashpad");
-    clone_repository(
-        "https://chromium.googlesource.com/crashpad/crashpad",
-        &crashpad_dir,
-        None
-    );
-    
-    // Clone mini_chromium to the expected location
-    let mini_chromium_dir = crashpad_dir.join("third_party/mini_chromium/mini_chromium");
-    fs::create_dir_all(mini_chromium_dir.parent().unwrap()).unwrap();
-    clone_repository(
-        "https://chromium.googlesource.com/chromium/mini_chromium",
-        &mini_chromium_dir,
-        Some("4e79cec054005026ef28a4c7c3a22ef31740b897") // From DEPS
-    );
-    
-    // Clone other required dependencies
-    let googletest_dir = crashpad_dir.join("third_party/googletest/googletest");
-    fs::create_dir_all(googletest_dir.parent().unwrap()).unwrap();
-    clone_repository(
-        "https://chromium.googlesource.com/external/github.com/google/googletest",
-        &googletest_dir,
-        Some("3983f67e32fb3e9294487b9d4f9586efa6e5d088") // From DEPS
-    );
-    
-    let lss_dir = crashpad_dir.join("third_party/lss/lss");
-    fs::create_dir_all(lss_dir.parent().unwrap()).unwrap();
-    clone_repository(
-        "https://chromium.googlesource.com/linux-syscall-support",
-        &lss_dir,
-        Some("9719c1e1e676814c456b55f5f070eabad6709d31") // From DEPS
-    );
-}
-
-fn get_depot_tools_path() -> PathBuf {
-    // Try from environment variable first
-    if let Ok(path) = env::var("DEPOT_TOOLS_PATH") {
-        let expanded = path.replace("$HOME", &env::var("HOME").unwrap());
-        return PathBuf::from(expanded);
-    }
-    
-    // Try common locations
-    let home = env::var("HOME").unwrap();
-    let common_paths = [
-        format!("{}/projects/depot_tools", home),
-        format!("{}/depot_tools", home),
-        "/opt/depot_tools".to_string(),
-    ];
-    
-    for path in &common_paths {
-        let path = PathBuf::from(path);
-        if path.exists() {
-            return path;
-        }
-    }
-    
-    panic!("Could not find depot_tools. Please set DEPOT_TOOLS_PATH environment variable");
-}
 
 fn main() {
     println!("cargo:rerun-if-changed=build.rs");
@@ -102,296 +10,219 @@ fn main() {
     let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
     let workspace_root = manifest_dir.parent().unwrap();
     
-    // Setup Crashpad and its dependencies
-    setup_crashpad_deps(&workspace_root);
+    // depot_tools
+    let depot_tools = workspace_root.join("third_party/depot_tools");
+    if !depot_tools.exists() {
+        println!("cargo:warning=Cloning depot_tools...");
+        Command::new("git")
+            .args(&["clone", "https://chromium.googlesource.com/chromium/tools/depot_tools.git"])
+            .arg(&depot_tools)
+            .status()
+            .expect("Failed to clone depot_tools");
+    }
     
-    let crashpad_dir = workspace_root.join("third_party/crashpad");
+    // PATH 설정
+    let path = format!("{}:{}", depot_tools.display(), env::var("PATH").unwrap_or_default());
     
-    // Detect target platform
+    // Crashpad
+    let crashpad_checkout = workspace_root.join("third_party/crashpad_checkout");
+    let crashpad_dir = crashpad_checkout.join("crashpad");
+    
+    if !crashpad_dir.exists() {
+        println!("cargo:warning=Setting up Crashpad...");
+        std::fs::create_dir_all(&crashpad_checkout).unwrap();
+        
+        // .gclient
+        std::fs::write(
+            crashpad_checkout.join(".gclient"),
+            r#"solutions = [
+  {
+    "name": "crashpad",
+    "url": "https://chromium.googlesource.com/crashpad/crashpad.git",
+    "deps_file": "DEPS",
+    "managed": False,
+  },
+]
+"#,
+        ).unwrap();
+        
+        // git clone
+        Command::new("git")
+            .args(&["clone", "https://chromium.googlesource.com/crashpad/crashpad.git"])
+            .current_dir(&crashpad_checkout)
+            .status()
+            .expect("Failed to clone crashpad");
+        
+        // gclient sync
+        println!("cargo:warning=Running gclient sync...");
+        Command::new("gclient")
+            .arg("sync")
+            .current_dir(&crashpad_checkout)
+            .env("PATH", &path)
+            .status()
+            .expect("Failed to run gclient sync");
+    }
+    
+    // 타겟 플랫폼 감지
     let target_os = env::var("CARGO_CFG_TARGET_OS").unwrap();
     let target_arch = env::var("CARGO_CFG_TARGET_ARCH").unwrap();
     let target_env = env::var("CARGO_CFG_TARGET_ENV").unwrap_or_default();
     
-    println!("Building Crashpad for {}-{}", target_os, target_arch);
+    // gn args 구성
+    let mut gn_args = vec!["is_debug=false".to_string()];
     
-    // Build Crashpad
-    build_crashpad(&crashpad_dir, &out_dir, &target_os, &target_arch, &target_env);
-    
-    // Generate bindings
-    generate_bindings(&crashpad_dir, &out_dir, &target_os);
-    
-    // Link libraries
-    link_crashpad(&out_dir, &target_os);
-}
-
-fn build_crashpad(crashpad_dir: &Path, out_dir: &Path, target_os: &str, target_arch: &str, target_env: &str) {
-    let build_dir = out_dir.join("crashpad_build");
-    std::fs::create_dir_all(&build_dir).unwrap();
-    
-    // Configure build based on target
-    match target_os {
-        "macos" => build_crashpad_macos(crashpad_dir, &build_dir),
-        "ios" => build_crashpad_ios(crashpad_dir, &build_dir, target_arch),
-        "linux" => build_crashpad_linux(crashpad_dir, &build_dir),
-        "android" => build_crashpad_android(crashpad_dir, &build_dir, target_arch),
-        "windows" => build_crashpad_windows(crashpad_dir, &build_dir, target_env),
-        _ => panic!("Unsupported target OS: {}", target_os),
-    }
-}
-
-fn build_crashpad_macos(crashpad_dir: &Path, build_dir: &Path) {
-    println!("Building Crashpad for macOS");
-    
-    let depot_tools = get_depot_tools_path();
-    
-    // Use gn to generate build files
-    let status = Command::new(depot_tools.join("gn"))
-        .args(&[
-            "gen",
-            build_dir.to_str().unwrap(),
-            "--args=is_debug=false target_cpu=\"x64\" mac_deployment_target=\"10.11\""
-        ])
-        .current_dir(crashpad_dir)
-        .status()
-        .expect("Failed to run gn");
-    
-    if !status.success() {
-        panic!("gn failed");
-    }
-    
-    // Build with ninja
-    let status = Command::new(depot_tools.join("ninja"))
-        .arg("-C")
-        .arg(build_dir)
-        .arg("crashpad_handler")
-        .arg("crashpad_client")
-        .status()
-        .expect("Failed to run ninja");
-    
-    if !status.success() {
-        panic!("ninja build failed");
-    }
-}
-
-fn build_crashpad_ios(crashpad_dir: &Path, build_dir: &Path, target_arch: &str) {
-    println!("Building Crashpad for iOS ({})", target_arch);
-    
-    let depot_tools = get_depot_tools_path();
-    
-    let cpu = match target_arch {
-        "aarch64" => "arm64",
-        "x86_64" => "x64",
-        _ => panic!("Unsupported iOS architecture: {}", target_arch),
-    };
-    
-    let status = Command::new(depot_tools.join("gn"))
-        .args(&[
-            "gen",
-            build_dir.to_str().unwrap(),
-            &format!("--args=is_debug=false target_os=\"ios\" target_cpu=\"{}\" ios_deployment_target=\"12.0\"", cpu)
-        ])
-        .current_dir(crashpad_dir)
-        .status()
-        .expect("Failed to run gn");
-    
-    if !status.success() {
-        panic!("gn failed");
-    }
-    
-    let status = Command::new(depot_tools.join("ninja"))
-        .arg("-C")
-        .arg(build_dir)
-        .arg("crashpad_client")
-        .status()
-        .expect("Failed to run ninja");
-    
-    if !status.success() {
-        panic!("ninja build failed");
-    }
-}
-
-fn build_crashpad_linux(crashpad_dir: &Path, build_dir: &Path) {
-    println!("Building Crashpad for Linux");
-    
-    let depot_tools = get_depot_tools_path();
-    
-    let status = Command::new(depot_tools.join("gn"))
-        .args(&[
-            "gen",
-            build_dir.to_str().unwrap(),
-            "--args=is_debug=false target_os=\"linux\" target_cpu=\"x64\""
-        ])
-        .current_dir(crashpad_dir)
-        .status()
-        .expect("Failed to run gn");
-    
-    if !status.success() {
-        panic!("gn failed");
-    }
-    
-    let status = Command::new(depot_tools.join("ninja"))
-        .arg("-C")
-        .arg(build_dir)
-        .arg("crashpad_handler")
-        .arg("crashpad_client")
-        .status()
-        .expect("Failed to run ninja");
-    
-    if !status.success() {
-        panic!("ninja build failed");
-    }
-}
-
-fn build_crashpad_android(crashpad_dir: &Path, build_dir: &Path, target_arch: &str) {
-    println!("Building Crashpad for Android ({})", target_arch);
-    
-    let depot_tools = get_depot_tools_path();
-    
-    let cpu = match target_arch {
-        "aarch64" => "arm64",
-        "armv7" => "arm",
-        "i686" => "x86",
-        "x86_64" => "x64",
-        _ => panic!("Unsupported Android architecture: {}", target_arch),
-    };
-    
-    // Android requires NDK path
-    let ndk_path = env::var("ANDROID_NDK_HOME")
-        .or_else(|_| env::var("ANDROID_NDK_ROOT"))
-        .expect("ANDROID_NDK_HOME or ANDROID_NDK_ROOT must be set");
-    
-    let status = Command::new(depot_tools.join("gn"))
-        .args(&[
-            "gen",
-            build_dir.to_str().unwrap(),
-            &format!(
-                "--args=is_debug=false target_os=\"android\" target_cpu=\"{}\" android_ndk_root=\"{}\" android_api_level=21",
-                cpu, ndk_path
-            )
-        ])
-        .current_dir(crashpad_dir)
-        .status()
-        .expect("Failed to run gn");
-    
-    if !status.success() {
-        panic!("gn failed");
-    }
-    
-    let status = Command::new(depot_tools.join("ninja"))
-        .arg("-C")
-        .arg(build_dir)
-        .arg("crashpad_handler")
-        .arg("crashpad_client")
-        .status()
-        .expect("Failed to run ninja");
-    
-    if !status.success() {
-        panic!("ninja build failed");
-    }
-}
-
-fn build_crashpad_windows(crashpad_dir: &Path, build_dir: &Path, target_env: &str) {
-    println!("Building Crashpad for Windows ({})", target_env);
-    
-    let depot_tools = get_depot_tools_path();
-    
-    let status = Command::new(depot_tools.join("gn"))
-        .args(&[
-            "gen",
-            build_dir.to_str().unwrap(),
-            "--args=is_debug=false target_os=\"win\" target_cpu=\"x64\""
-        ])
-        .current_dir(crashpad_dir)
-        .status()
-        .expect("Failed to run gn");
-    
-    if !status.success() {
-        panic!("gn failed");
-    }
-    
-    let status = Command::new(depot_tools.join("ninja"))
-        .arg("-C")
-        .arg(build_dir)
-        .arg("crashpad_handler")
-        .arg("crashpad_client")
-        .status()
-        .expect("Failed to run ninja");
-    
-    if !status.success() {
-        panic!("ninja build failed");
-    }
-}
-
-fn generate_bindings(crashpad_dir: &Path, out_dir: &Path, target_os: &str) {
-    let bindings = bindgen::Builder::default()
-        .header("wrapper.h")
-        .clang_arg(format!("-I{}", crashpad_dir.display()))
-        .clang_arg(format!("-I{}/third_party/mini_chromium/mini_chromium", crashpad_dir.display()))
-        // Platform specific defines
-        .clang_arg(match target_os {
-            "macos" => "-DOS_MACOSX",
-            "ios" => "-DOS_IOS",
-            "linux" => "-DOS_LINUX",
-            "android" => "-DOS_ANDROID",
-            "windows" => "-DOS_WIN",
-            _ => "",
-        })
-        // Parse the bindings, ignoring invalid code
-        .parse_callbacks(Box::new(bindgen::CargoCallbacks))
-        .generate()
-        .expect("Unable to generate bindings");
-    
-    // Write the bindings to the $OUT_DIR/bindings.rs file
-    bindings
-        .write_to_file(out_dir.join("bindings.rs"))
-        .expect("Couldn't write bindings!");
-}
-
-fn link_crashpad(out_dir: &Path, target_os: &str) {
-    let build_dir = out_dir.join("crashpad_build");
-    
-    println!("cargo:rustc-link-search=native={}", build_dir.display());
-    
-    // Link Crashpad libraries
-    println!("cargo:rustc-link-lib=static=crashpad_client");
-    println!("cargo:rustc-link-lib=static=crashpad_util");
-    println!("cargo:rustc-link-lib=static=crashpad_base");
-    
-    // Platform-specific libraries
-    match target_os {
-        "macos" | "ios" => {
-            println!("cargo:rustc-link-lib=framework=Foundation");
-            println!("cargo:rustc-link-lib=framework=Security");
-            println!("cargo:rustc-link-lib=framework=CoreFoundation");
-            println!("cargo:rustc-link-lib=framework=IOKit");
-            if target_os == "macos" {
-                println!("cargo:rustc-link-lib=framework=ApplicationServices");
+    match target_os.as_str() {
+        "linux" => {
+            match target_arch.as_str() {
+                "x86_64" => gn_args.push("target_cpu=\"x64\"".to_string()),
+                "aarch64" => gn_args.push("target_cpu=\"arm64\"".to_string()),
+                _ => panic!("Unsupported Linux arch: {}", target_arch),
             }
         }
-        "linux" | "android" => {
-            println!("cargo:rustc-link-lib=pthread");
-            println!("cargo:rustc-link-lib=dl");
+        "android" => {
+            gn_args.push("target_os=\"android\"".to_string());
+            match target_arch.as_str() {
+                "aarch64" => gn_args.push("target_cpu=\"arm64\"".to_string()),
+                "x86_64" => gn_args.push("target_cpu=\"x64\"".to_string()),
+                "armv7" => gn_args.push("target_cpu=\"arm\"".to_string()),
+                _ => panic!("Unsupported Android arch: {}", target_arch),
+            }
+            // Android NDK 경로
+            if let Ok(ndk) = env::var("ANDROID_NDK_HOME") {
+                gn_args.push(format!("android_ndk_root=\"{}\"", ndk));
+                gn_args.push("android_api_level=21".to_string());
+            } else {
+                panic!("ANDROID_NDK_HOME not set for Android build");
+            }
+        }
+        "macos" => {
+            match target_arch.as_str() {
+                "x86_64" => gn_args.push("target_cpu=\"x64\"".to_string()),
+                "aarch64" => gn_args.push("target_cpu=\"arm64\"".to_string()),
+                _ => panic!("Unsupported macOS arch: {}", target_arch),
+            }
+        }
+        "ios" => {
+            gn_args.push("target_os=\"ios\"".to_string());
+            match target_arch.as_str() {
+                "aarch64" => gn_args.push("target_cpu=\"arm64\"".to_string()),
+                "x86_64" => gn_args.push("target_cpu=\"x64\"".to_string()),
+                _ => panic!("Unsupported iOS arch: {}", target_arch),
+            }
         }
         "windows" => {
-            println!("cargo:rustc-link-lib=advapi32");
-            println!("cargo:rustc-link-lib=winhttp");
-            println!("cargo:rustc-link-lib=version");
-            println!("cargo:rustc-link-lib=powrprof");
+            gn_args.push("target_cpu=\"x64\"".to_string());
+            if target_env == "msvc" {
+                // MSVC 설정
+            }
+        }
+        _ => panic!("Unsupported OS: {}", target_os),
+    }
+    
+    let args_str = gn_args.join(" ");
+    
+    // 빌드 디렉토리를 타겟별로 분리
+    let build_name = format!("{}-{}", target_os, target_arch);
+    let build_dir = crashpad_dir.join("out").join(&build_name);
+    
+    // gn gen
+    println!("cargo:warning=Running gn gen for {}...", build_name);
+    Command::new("gn")
+        .args(&["gen", build_dir.to_str().unwrap(), &format!("--args={}", args_str)])
+        .current_dir(&crashpad_dir)
+        .env("PATH", &path)
+        .status()
+        .expect("Failed to run gn");
+    
+    // ninja
+    println!("cargo:warning=Running ninja...");
+    Command::new("ninja")
+        .args(&["-C", build_dir.to_str().unwrap()])
+        .current_dir(&crashpad_dir)
+        .env("PATH", &path)
+        .status()
+        .expect("Failed to run ninja");
+    
+    // wrapper.cc 컴파일
+    println!("cargo:warning=Compiling wrapper.cc...");
+    let wrapper_obj = out_dir.join("crashpad_wrapper.o");
+    
+    let mut cc_cmd = Command::new("c++");
+    cc_cmd.args(&[
+        "-c",
+        "-std=c++17",
+        "-I", crashpad_dir.to_str().unwrap(),
+        "-I", crashpad_dir.join("third_party/mini_chromium/mini_chromium").to_str().unwrap(),
+        "-o", wrapper_obj.to_str().unwrap(),
+        manifest_dir.join("crashpad_wrapper.cc").to_str().unwrap(),
+    ]);
+    
+    // 플랫폼별 컴파일 플래그
+    match target_os.as_str() {
+        "linux" => {
+            cc_cmd.arg("-fPIC");
+        }
+        "android" => {
+            if let Ok(_ndk) = env::var("ANDROID_NDK_HOME") {
+                // NDK 컴파일러 사용
+                // TODO: NDK toolchain 설정
+            }
         }
         _ => {}
     }
     
-    // Link C++ standard library
-    let cpp_lib = if target_os == "macos" || target_os == "ios" {
-        "c++"
-    } else if target_os == "windows" {
-        // MSVC doesn't need explicit linking
-        ""
-    } else {
-        "stdc++"
-    };
-    
-    if !cpp_lib.is_empty() {
-        println!("cargo:rustc-link-lib={}", cpp_lib);
+    let cc_status = cc_cmd.status().expect("Failed to compile wrapper.cc");
+    if !cc_status.success() {
+        panic!("Failed to compile wrapper.cc: {:?}", cc_status);
     }
+    
+    // wrapper 오브젝트 파일이 생성되었는지 확인
+    if !wrapper_obj.exists() {
+        panic!("wrapper.cc compilation failed - object file not created: {:?}", wrapper_obj);
+    }
+    
+    // bindgen
+    let bindings = bindgen::Builder::default()
+        .header("wrapper.h")
+        .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()))
+        .generate()
+        .expect("Unable to generate bindings");
+    
+    bindings
+        .write_to_file(out_dir.join("bindings.rs"))
+        .expect("Couldn't write bindings!");
+    
+    // 링킹
+    let obj_dir = build_dir.join("obj");
+    
+    // 라이브러리 검색 경로
+    println!("cargo:rustc-link-search=native={}", obj_dir.join("client").display());
+    println!("cargo:rustc-link-search=native={}", obj_dir.join("util").display());
+    println!("cargo:rustc-link-search=native={}", obj_dir.join("third_party/mini_chromium/mini_chromium/base").display());
+    println!("cargo:rustc-link-search=native={}", out_dir.display());
+    
+    // wrapper 오브젝트 파일을 정적 라이브러리로 만들기
+    let lib_path = out_dir.join("libcrashpad_wrapper.a");
+    let ar_status = Command::new("ar")
+        .args(&["rcs", lib_path.to_str().unwrap(), wrapper_obj.to_str().unwrap()])
+        .status()
+        .expect("Failed to create static library");
+    
+    if !ar_status.success() {
+        panic!("Failed to create static library: {:?}", ar_status);
+    }
+    
+    if !lib_path.exists() {
+        panic!("Static library not created: {:?}", lib_path);
+    }
+    
+    // 라이브러리 링크
+    println!("cargo:rustc-link-lib=static=crashpad_wrapper");
+    println!("cargo:rustc-link-lib=static=client");
+    println!("cargo:rustc-link-lib=static=util");
+    println!("cargo:rustc-link-lib=static=base");
+    
+    // 시스템 라이브러리
+    println!("cargo:rustc-link-lib=stdc++");
+    println!("cargo:rustc-link-lib=pthread");
 }

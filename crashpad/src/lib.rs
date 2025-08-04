@@ -2,6 +2,9 @@
 //! 
 //! This crate provides a safe, idiomatic Rust interface to the Crashpad crash reporting library.
 
+mod client;
+
+pub use client::CrashpadClient;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -20,5 +23,3 @@ pub enum CrashpadError {
 }
 
 pub type Result<T> = std::result::Result<T, CrashpadError>;
-
-// TODO: Implement Client, Handler, and other core types

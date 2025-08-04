@@ -14,7 +14,7 @@ links = "crashpad"
 [build-dependencies]
 bindgen = "0.69"
 cc = "1.0"
-cmake = "0.1"
+shellexpand = "3.1"
 
 [features]
 default = []
