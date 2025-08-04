@@ -46,96 +46,95 @@ fn main() -> Result<()> {
 
 fn build(sh: &Shell, release: bool) -> Result<()> {
     println!("Building crashpad-rs...");
-    
+
     if release {
         cmd!(sh, "cargo build --release")
             .run()
             .context("Failed to build")?;
     } else {
-        cmd!(sh, "cargo build")
-            .run()
-            .context("Failed to build")?;
+        cmd!(sh, "cargo build").run().context("Failed to build")?;
     }
-    
+
     println!("Build complete!");
     Ok(())
 }
 
 fn dist(sh: &Shell, output_dir: &Path) -> Result<()> {
     println!("Creating distribution package...");
-    
+
     // Build in release mode first
     build(sh, true)?;
-    
+
     // Create output directory structure
     sh.create_dir(output_dir)?;
     let lib_dir = output_dir.join("lib");
     let include_dir = output_dir.join("include");
     let bin_dir = output_dir.join("bin");
-    
+
     sh.create_dir(&lib_dir)?;
     sh.create_dir(&include_dir)?;
     sh.create_dir(&bin_dir)?;
-    
+
     // Find the workspace root
     let workspace_root = find_workspace_root(sh)?;
-    
+
     // Detect platform
     let (os, arch) = detect_platform();
     let platform = format!("{}-{}", os, arch);
-    
+
     // Handler executable name
     let handler_name = if cfg!(windows) {
         "crashpad_handler.exe"
     } else {
         "crashpad_handler"
     };
-    
+
     // Find and copy the built handler
     let handler_path = workspace_root
         .join("third_party/crashpad_checkout/crashpad/out")
         .join(&platform)
         .join(handler_name);
-    
+
     if !handler_path.exists() {
         anyhow::bail!(
             "crashpad_handler not found at: {}\nMake sure to build crashpad-sys first",
             handler_path.display()
         );
     }
-    
+
     let dist_handler = bin_dir.join(handler_name);
     sh.copy_file(&handler_path, &dist_handler)?;
     println!("✓ Copied crashpad_handler to dist/bin/");
-    
+
     // Copy Rust libraries
     let target_release = workspace_root.join("target/release");
-    
+
     // Copy .rlib files (Rust libraries)
     for entry in std::fs::read_dir(&target_release)? {
         let entry = entry?;
         let path = entry.path();
         if let Some(name) = path.file_name() {
             let name_str = name.to_string_lossy();
-            if name_str.starts_with("libcrashpad") && (name_str.ends_with(".rlib") || name_str.ends_with(".a")) {
+            if name_str.starts_with("libcrashpad")
+                && (name_str.ends_with(".rlib") || name_str.ends_with(".a"))
+            {
                 let dest = lib_dir.join(name);
                 sh.copy_file(&path, &dest)?;
                 println!("✓ Copied library: {}", name_str);
             }
         }
     }
-    
+
     // Copy header files
     let crashpad_sys_dir = workspace_root.join("crashpad-sys");
     if crashpad_sys_dir.join("wrapper.h").exists() {
         sh.copy_file(
             &crashpad_sys_dir.join("wrapper.h"),
-            &include_dir.join("crashpad_wrapper.h")
+            &include_dir.join("crashpad_wrapper.h"),
         )?;
         println!("✓ Copied header: crashpad_wrapper.h");
     }
-    
-    
+
     // Create README for distribution
     let readme_content = format!(
         r#"# Crashpad-rs Distribution Package
@@ -196,9 +195,9 @@ When deploying your application:
 "#,
         platform, handler_name, handler_name
     );
-    
+
     sh.write_file(output_dir.join("README.md"), readme_content)?;
-    
+
     // Create a simple Cargo.toml for the distribution
     let cargo_toml = format!(
         r#"[package]
@@ -214,15 +213,18 @@ crashpad-sys = {{ path = "lib" }}
 "#
     );
     sh.write_file(output_dir.join("Cargo.toml"), cargo_toml)?;
-    
-    println!("\n✓ Distribution package created at: {}", output_dir.display());
+
+    println!(
+        "\n✓ Distribution package created at: {}",
+        output_dir.display()
+    );
     println!("  Platform: {}", platform);
     println!("\nDirectory structure:");
     println!("  lib/      - Rust libraries");
-    println!("  include/  - Header files");  
+    println!("  include/  - Header files");
     println!("  bin/      - crashpad_handler executable");
     println!("  examples/ - Example applications");
-    
+
     Ok(())
 }
 
@@ -235,14 +237,14 @@ fn test(sh: &Shell) -> Result<()> {
 fn clean(sh: &Shell) -> Result<()> {
     println!("Cleaning build artifacts...");
     cmd!(sh, "cargo clean").run()?;
-    
+
     // Also clean distribution directory
     let dist_dir = PathBuf::from("dist");
     if dist_dir.exists() {
         sh.remove_path(&dist_dir)?;
         println!("✓ Removed dist/");
     }
-    
+
     Ok(())
 }
 
@@ -250,12 +252,12 @@ fn find_workspace_root(sh: &Shell) -> Result<PathBuf> {
     let output = cmd!(sh, "cargo metadata --no-deps --format-version 1")
         .read()
         .context("Failed to get cargo metadata")?;
-    
+
     let metadata: serde_json::Value = serde_json::from_str(&output)?;
     let workspace_root = metadata["workspace_root"]
         .as_str()
         .context("Failed to find workspace root")?;
-    
+
     Ok(PathBuf::from(workspace_root))
 }
 
@@ -269,7 +271,7 @@ fn detect_platform() -> (&'static str, &'static str) {
     } else {
         "unknown"
     };
-    
+
     let arch = if cfg!(target_arch = "x86_64") {
         "x86_64"
     } else if cfg!(target_arch = "aarch64") {
@@ -277,7 +279,7 @@ fn detect_platform() -> (&'static str, &'static str) {
     } else {
         "unknown"
     };
-    
+
     (os, arch)
 }
 
@@ -293,7 +295,5 @@ fn is_executable(path: &Path) -> bool {
 
 #[cfg(not(unix))]
 fn is_executable(path: &Path) -> bool {
-    path.extension()
-        .map(|ext| ext == "exe")
-        .unwrap_or(false)
+    path.extension().map(|ext| ext == "exe").unwrap_or(false)
 }

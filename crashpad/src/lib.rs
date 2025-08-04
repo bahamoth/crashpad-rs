@@ -1,5 +1,5 @@
 //! Safe Rust bindings for Google Crashpad
-//! 
+//!
 //! This crate provides a safe, idiomatic Rust interface to the Crashpad crash reporting library.
 
 mod client;
@@ -13,13 +13,13 @@ use thiserror::Error;
 pub enum CrashpadError {
     #[error("Failed to initialize Crashpad")]
     InitializationFailed,
-    
+
     #[error("Failed to start handler")]
     HandlerStartFailed,
-    
+
     #[error("Invalid configuration: {0}")]
     InvalidConfiguration(String),
-    
+
     #[error("IO error: {0}")]
     IoError(#[from] std::io::Error),
 }

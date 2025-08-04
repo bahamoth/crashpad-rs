@@ -1,9 +1,9 @@
+use std::collections::HashMap;
 use std::ffi::CString;
 use std::path::Path;
 use std::ptr;
-use std::collections::HashMap;
 
-use crate::{Result, CrashpadError, CrashpadConfig};
+use crate::{CrashpadConfig, CrashpadError, Result};
 
 // Import FFI bindings
 use crashpad_sys::*;
@@ -22,7 +22,7 @@ impl CrashpadClient {
         }
         Ok(CrashpadClient { handle })
     }
-    
+
     /// Starts the Crashpad handler with a configuration.
     pub fn start_with_config(
         &self,
@@ -31,12 +31,12 @@ impl CrashpadClient {
     ) -> Result<()> {
         // Get handler path (with fallback to same directory)
         let handler_path = config.handler_path()?;
-        
+
         // Get paths
         let database_path = config.database_path();
         let metrics_path = config.metrics_path();
         let url = config.url();
-        
+
         // Ensure directories exist
         if let Some(parent) = database_path.parent() {
             std::fs::create_dir_all(parent)?;
@@ -44,16 +44,10 @@ impl CrashpadClient {
         if let Some(parent) = metrics_path.parent() {
             std::fs::create_dir_all(parent)?;
         }
-        
-        self.start_handler(
-            &handler_path,
-            database_path,
-            metrics_path,
-            url,
-            annotations,
-        )
+
+        self.start_handler(&handler_path, database_path, metrics_path, url, annotations)
     }
-    
+
     /// Starts the Crashpad handler process.
     ///
     /// # Arguments
@@ -74,18 +68,19 @@ impl CrashpadClient {
         let handler_path_c = path_to_cstring(handler_path)?;
         let database_path_c = path_to_cstring(database_path)?;
         let metrics_path_c = path_to_cstring(metrics_path)?;
-        
+
         let url_c = match url {
-            Some(u) => Some(CString::new(u).map_err(|_| {
-                CrashpadError::InvalidConfiguration("Invalid URL".to_string())
-            })?),
+            Some(u) => Some(
+                CString::new(u)
+                    .map_err(|_| CrashpadError::InvalidConfiguration("Invalid URL".to_string()))?,
+            ),
             None => None,
         };
-        
+
         // Convert annotations to C-compatible arrays
         let mut keys: Vec<CString> = Vec::new();
         let mut values: Vec<CString> = Vec::new();
-        
+
         for (k, v) in annotations {
             keys.push(CString::new(k.as_str()).map_err(|_| {
                 CrashpadError::InvalidConfiguration("Invalid annotation key".to_string())
@@ -94,15 +89,12 @@ impl CrashpadClient {
                 CrashpadError::InvalidConfiguration("Invalid annotation value".to_string())
             })?);
         }
-        
+
         // Convert to raw pointers
-        let keys_ptrs: Vec<*const std::os::raw::c_char> = keys.iter()
-            .map(|k| k.as_ptr())
-            .collect();
-        let values_ptrs: Vec<*const std::os::raw::c_char> = values.iter()
-            .map(|v| v.as_ptr())
-            .collect();
-        
+        let keys_ptrs: Vec<*const std::os::raw::c_char> = keys.iter().map(|k| k.as_ptr()).collect();
+        let values_ptrs: Vec<*const std::os::raw::c_char> =
+            values.iter().map(|v| v.as_ptr()).collect();
+
         let success = unsafe {
             crashpad_client_start_handler(
                 self.handle,
@@ -115,61 +107,53 @@ impl CrashpadClient {
                 annotations.len(),
             )
         };
-        
+
         if success {
             Ok(())
         } else {
             Err(CrashpadError::HandlerStartFailed)
         }
     }
-    
+
     /// Sets the handler IPC pipe (Windows only).
     #[cfg(target_os = "windows")]
     pub fn set_handler_ipc_pipe(&self, ipc_pipe: &str) -> Result<()> {
-        use std::os::windows::ffi::OsStrExt;
         use std::ffi::OsStr;
-        
-        let wide: Vec<u16> = OsStr::new(ipc_pipe)
-            .encode_wide()
-            .chain(Some(0))
-            .collect();
-        
-        let success = unsafe {
-            crashpad_client_set_handler_ipc_pipe(self.handle, wide.as_ptr())
-        };
-        
+        use std::os::windows::ffi::OsStrExt;
+
+        let wide: Vec<u16> = OsStr::new(ipc_pipe).encode_wide().chain(Some(0)).collect();
+
+        let success = unsafe { crashpad_client_set_handler_ipc_pipe(self.handle, wide.as_ptr()) };
+
         if success {
             Ok(())
         } else {
             Err(CrashpadError::HandlerStartFailed)
         }
     }
-    
+
     /// Sets the handler Mach service (macOS/iOS only).
     #[cfg(any(target_os = "macos", target_os = "ios"))]
     pub fn set_handler_mach_service(&self, service_name: &str) -> Result<()> {
-        let service_name_c = CString::new(service_name).map_err(|_| {
-            CrashpadError::InvalidConfiguration("Invalid service name".to_string())
-        })?;
-        
+        let service_name_c = CString::new(service_name)
+            .map_err(|_| CrashpadError::InvalidConfiguration("Invalid service name".to_string()))?;
+
         let success = unsafe {
             crashpad_client_set_handler_mach_service(self.handle, service_name_c.as_ptr())
         };
-        
+
         if success {
             Ok(())
         } else {
             Err(CrashpadError::HandlerStartFailed)
         }
     }
-    
+
     /// Use system default crash handler (macOS only).
     #[cfg(target_os = "macos")]
     pub fn use_system_default_handler(&self) -> Result<()> {
-        let success = unsafe {
-            crashpad_client_use_system_default_handler(self.handle)
-        };
-        
+        let success = unsafe { crashpad_client_use_system_default_handler(self.handle) };
+
         if success {
             Ok(())
         } else {
@@ -191,7 +175,8 @@ unsafe impl Send for CrashpadClient {}
 unsafe impl Sync for CrashpadClient {}
 
 fn path_to_cstring(path: &Path) -> Result<CString> {
-    let path_str = path.to_str()
+    let path_str = path
+        .to_str()
         .ok_or_else(|| CrashpadError::InvalidConfiguration("Invalid path".to_string()))?;
     CString::new(path_str)
         .map_err(|_| CrashpadError::InvalidConfiguration("Path contains null byte".to_string()))
