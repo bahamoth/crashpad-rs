@@ -51,7 +51,7 @@ fn test_start_handler() {
         println!("Handler started successfully");
     } else {
         // May fail if handler is missing (depends on Crashpad implementation)
-        println!("Handler path doesn't exist, result: {:?}", result);
+        println!("Handler path doesn't exist, result: {result:?}");
     }
 }
 
@@ -94,7 +94,7 @@ fn test_invalid_paths() {
     // Note: Crashpad may process handler startup asynchronously
     // so it may not return failure immediately for invalid paths
     // The actual handler process will fail later
-    println!("Result with invalid path: {:?}", result);
+    println!("Result with invalid path: {result:?}");
 }
 
 #[test]
@@ -127,7 +127,7 @@ fn test_with_annotations() {
 
     match result {
         Ok(_) => println!("Handler with annotations started successfully"),
-        Err(e) => println!("Handler start failed (expected in test env): {:?}", e),
+        Err(e) => println!("Handler start failed (expected in test env): {e:?}"),
     }
 }
 

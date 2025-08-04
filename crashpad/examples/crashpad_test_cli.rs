@@ -81,7 +81,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!("Any crashes will be saved to: ./crashpad_database");
         }
         Err(e) => {
-            eprintln!("✗ Failed to start handler: {}", e);
+            eprintln!("✗ Failed to start handler: {e}");
             eprintln!("\nTips:");
             eprintln!("- Set CRASHPAD_HANDLER environment variable to handler path");
             eprintln!("- Or ensure crashpad_handler is in the same directory as this executable");

@@ -41,7 +41,7 @@ fn main() {
     if !depot_tools.exists() {
         println!("cargo:warning=Cloning depot_tools...");
         Command::new("git")
-            .args(&[
+            .args([
                 "clone",
                 "https://chromium.googlesource.com/chromium/tools/depot_tools.git",
             ])
@@ -82,7 +82,7 @@ fn main() {
 
         // git clone
         Command::new("git")
-            .args(&[
+            .args([
                 "clone",
                 "https://chromium.googlesource.com/crashpad/crashpad.git",
             ])
@@ -112,7 +112,7 @@ fn main() {
         "linux" => match target_arch.as_str() {
             "x86_64" => gn_args.push("target_cpu=\"x64\"".to_string()),
             "aarch64" => gn_args.push("target_cpu=\"arm64\"".to_string()),
-            _ => panic!("Unsupported Linux arch: {}", target_arch),
+            _ => panic!("Unsupported Linux arch: {target_arch}"),
         },
         "android" => {
             gn_args.push("target_os=\"android\"".to_string());
@@ -120,11 +120,11 @@ fn main() {
                 "aarch64" => gn_args.push("target_cpu=\"arm64\"".to_string()),
                 "x86_64" => gn_args.push("target_cpu=\"x64\"".to_string()),
                 "armv7" => gn_args.push("target_cpu=\"arm\"".to_string()),
-                _ => panic!("Unsupported Android arch: {}", target_arch),
+                _ => panic!("Unsupported Android arch: {target_arch}"),
             }
             // Android NDK path
             if let Ok(ndk) = env::var("ANDROID_NDK_HOME") {
-                gn_args.push(format!("android_ndk_root=\"{}\"", ndk));
+                gn_args.push(format!("android_ndk_root=\"{ndk}\""));
                 gn_args.push("android_api_level=21".to_string());
             } else {
                 panic!("ANDROID_NDK_HOME not set for Android build");
@@ -133,14 +133,14 @@ fn main() {
         "macos" => match target_arch.as_str() {
             "x86_64" => gn_args.push("target_cpu=\"x64\"".to_string()),
             "aarch64" => gn_args.push("target_cpu=\"arm64\"".to_string()),
-            _ => panic!("Unsupported macOS arch: {}", target_arch),
+            _ => panic!("Unsupported macOS arch: {target_arch}"),
         },
         "ios" => {
             gn_args.push("target_os=\"ios\"".to_string());
             match target_arch.as_str() {
                 "aarch64" => gn_args.push("target_cpu=\"arm64\"".to_string()),
                 "x86_64" => gn_args.push("target_cpu=\"x64\"".to_string()),
-                _ => panic!("Unsupported iOS arch: {}", target_arch),
+                _ => panic!("Unsupported iOS arch: {target_arch}"),
             }
         }
         "windows" => {
@@ -149,22 +149,22 @@ fn main() {
                 // MSVC configuration
             }
         }
-        _ => panic!("Unsupported OS: {}", target_os),
+        _ => panic!("Unsupported OS: {target_os}"),
     }
 
     let args_str = gn_args.join(" ");
 
     // Separate build directory by target
-    let build_name = format!("{}-{}", target_os, target_arch);
+    let build_name = format!("{target_os}-{target_arch}");
     let build_dir = crashpad_dir.join("out").join(&build_name);
 
     // gn gen
-    println!("cargo:warning=Running gn gen for {}...", build_name);
+    println!("cargo:warning=Running gn gen for {build_name}...");
     Command::new("gn")
-        .args(&[
+        .args([
             "gen",
             build_dir.to_str().unwrap(),
-            &format!("--args={}", args_str),
+            &format!("--args={args_str}"),
         ])
         .current_dir(&crashpad_dir)
         .env("PATH", &path)
@@ -174,7 +174,7 @@ fn main() {
     // ninja
     println!("cargo:warning=Running ninja...");
     Command::new("ninja")
-        .args(&["-C", build_dir.to_str().unwrap()])
+        .args(["-C", build_dir.to_str().unwrap()])
         .current_dir(&crashpad_dir)
         .env("PATH", &path)
         .status()
@@ -185,7 +185,7 @@ fn main() {
     let wrapper_obj = out_dir.join("crashpad_wrapper.o");
 
     let mut cc_cmd = Command::new("c++");
-    cc_cmd.args(&[
+    cc_cmd.args([
         "-c",
         "-std=c++17",
         "-I",
@@ -206,14 +206,14 @@ fn main() {
             cc_cmd.arg("-fPIC");
         }
         "macos" => {
-            cc_cmd.args(&["-fPIC", "-mmacosx-version-min=10.9"]);
+            cc_cmd.args(["-fPIC", "-mmacosx-version-min=10.9"]);
             // macOS specific defines
-            cc_cmd.args(&["-DCRASHPAD_MACOS", "-DOS_MACOSX=1"]);
+            cc_cmd.args(["-DCRASHPAD_MACOS", "-DOS_MACOSX=1"]);
         }
         "ios" => {
-            cc_cmd.args(&["-fPIC", "-mios-version-min=9.0"]);
+            cc_cmd.args(["-fPIC", "-mios-version-min=9.0"]);
             // iOS specific defines
-            cc_cmd.args(&["-DCRASHPAD_IOS", "-DOS_IOS=1"]);
+            cc_cmd.args(["-DCRASHPAD_IOS", "-DOS_IOS=1"]);
             if target_arch == "aarch64" {
                 cc_cmd.arg("-arch").arg("arm64");
             } else if target_arch == "x86_64" {
@@ -231,15 +231,12 @@ fn main() {
 
     let cc_status = cc_cmd.status().expect("Failed to compile wrapper.cc");
     if !cc_status.success() {
-        panic!("Failed to compile wrapper.cc: {:?}", cc_status);
+        panic!("Failed to compile wrapper.cc: {cc_status:?}");
     }
 
     // Check if wrapper object file was created
     if !wrapper_obj.exists() {
-        panic!(
-            "wrapper.cc compilation failed - object file not created: {:?}",
-            wrapper_obj
-        );
+        panic!("wrapper.cc compilation failed - object file not created: {wrapper_obj:?}");
     }
 
     // bindgen
@@ -292,7 +289,7 @@ fn main() {
         "macos" | "ios" => {
             // macOS/iOS uses libtool
             Command::new("libtool")
-                .args(&[
+                .args([
                     "-static",
                     "-o",
                     lib_path.to_str().unwrap(),
@@ -304,7 +301,7 @@ fn main() {
         _ => {
             // Linux and others use ar
             Command::new("ar")
-                .args(&[
+                .args([
                     "rcs",
                     lib_path.to_str().unwrap(),
                     wrapper_obj.to_str().unwrap(),
@@ -315,11 +312,11 @@ fn main() {
     };
 
     if !ar_status.success() {
-        panic!("Failed to create static library: {:?}", ar_status);
+        panic!("Failed to create static library: {ar_status:?}");
     }
 
     if !lib_path.exists() {
-        panic!("Static library not created: {:?}", lib_path);
+        panic!("Static library not created: {lib_path:?}");
     }
 
     // Link libraries (order matters!)

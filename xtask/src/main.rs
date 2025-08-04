@@ -80,7 +80,7 @@ fn dist(sh: &Shell, output_dir: &Path) -> Result<()> {
 
     // Detect platform
     let (os, arch) = detect_platform();
-    let platform = format!("{}-{}", os, arch);
+    let platform = format!("{os}-{arch}");
 
     // Handler executable name
     let handler_name = if cfg!(windows) {
@@ -120,7 +120,7 @@ fn dist(sh: &Shell, output_dir: &Path) -> Result<()> {
             {
                 let dest = lib_dir.join(name);
                 sh.copy_file(&path, &dest)?;
-                println!("✓ Copied library: {}", name_str);
+                println!("✓ Copied library: {name_str}");
             }
         }
     }
@@ -129,8 +129,8 @@ fn dist(sh: &Shell, output_dir: &Path) -> Result<()> {
     let crashpad_sys_dir = workspace_root.join("crashpad-sys");
     if crashpad_sys_dir.join("wrapper.h").exists() {
         sh.copy_file(
-            &crashpad_sys_dir.join("wrapper.h"),
-            &include_dir.join("crashpad_wrapper.h"),
+            crashpad_sys_dir.join("wrapper.h"),
+            include_dir.join("crashpad_wrapper.h"),
         )?;
         println!("✓ Copied header: crashpad_wrapper.h");
     }
@@ -139,7 +139,7 @@ fn dist(sh: &Shell, output_dir: &Path) -> Result<()> {
     let readme_content = format!(
         r#"# Crashpad-rs Distribution Package
 
-Platform: {}
+Platform: {platform}
 
 ## Directory Structure
 
@@ -153,7 +153,7 @@ dist/
 
 ## Contents
 
-- `bin/{}` - The Crashpad handler executable
+- `bin/{handler_name}` - The Crashpad handler executable
 - `lib/libcrashpad*.rlib` - Rust library files
 - `include/crashpad_wrapper.h` - C API header
 
@@ -189,18 +189,16 @@ client.start_with_config(&config, &annotations)?;
 ## Deployment
 
 When deploying your application:
-1. Copy `bin/{}` to the same directory as your executable
+1. Copy `bin/{handler_name}` to the same directory as your executable
 2. Or install it system-wide in `/usr/local/bin` (Unix) or Program Files (Windows)
 3. Or set `CRASHPAD_HANDLER` environment variable to its location
-"#,
-        platform, handler_name, handler_name
+"#
     );
 
     sh.write_file(output_dir.join("README.md"), readme_content)?;
 
     // Create a simple Cargo.toml for the distribution
-    let cargo_toml = format!(
-        r#"[package]
+    let cargo_toml = r#"[package]
 name = "crashpad-dist"
 version = "0.1.0"
 edition = "2021"
@@ -209,16 +207,16 @@ edition = "2021"
 path = "lib/libcrashpad.rlib"
 
 [dependencies]
-crashpad-sys = {{ path = "lib" }}
+crashpad-sys = { path = "lib" }
 "#
-    );
+    .to_string();
     sh.write_file(output_dir.join("Cargo.toml"), cargo_toml)?;
 
     println!(
         "\n✓ Distribution package created at: {}",
         output_dir.display()
     );
-    println!("  Platform: {}", platform);
+    println!("  Platform: {platform}");
     println!("\nDirectory structure:");
     println!("  lib/      - Rust libraries");
     println!("  include/  - Header files");
@@ -283,17 +281,3 @@ fn detect_platform() -> (&'static str, &'static str) {
     (os, arch)
 }
 
-#[cfg(unix)]
-fn is_executable(path: &Path) -> bool {
-    use std::os::unix::fs::PermissionsExt;
-    if let Ok(metadata) = path.metadata() {
-        metadata.permissions().mode() & 0o111 != 0
-    } else {
-        false
-    }
-}
-
-#[cfg(not(unix))]
-fn is_executable(path: &Path) -> bool {
-    path.extension().map(|ext| ext == "exe").unwrap_or(false)
-}
