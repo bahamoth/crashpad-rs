@@ -416,12 +416,12 @@ fn main() {
     println!("cargo:rustc-link-lib=static=client");
     println!("cargo:rustc-link-lib=static=common");
     println!("cargo:rustc-link-lib=static=util");
-    
+
     // MIG (Mach Interface Generator) is only for macOS/iOS
     if target_os == "macos" || target_os == "ios" {
         println!("cargo:rustc-link-lib=static=mig_output");
     }
-    
+
     println!("cargo:rustc-link-lib=static=format");
     println!("cargo:rustc-link-lib=static=minidump");
     println!("cargo:rustc-link-lib=static=snapshot");
