@@ -14,6 +14,7 @@ fn test_client_new_and_drop() {
 }
 
 #[test]
+#[ignore] // Run with `cargo test -- --ignored` due to global state conflicts
 fn test_start_handler() {
     let client = CrashpadClient::new().expect("Failed to create client");
 
@@ -56,6 +57,7 @@ fn test_start_handler() {
 }
 
 #[test]
+#[ignore] // Run with `cargo test -- --ignored` due to global state conflicts
 fn test_invalid_paths() {
     let client = CrashpadClient::new().expect("Failed to create client");
 
@@ -98,6 +100,7 @@ fn test_invalid_paths() {
 }
 
 #[test]
+#[ignore] // Run with `cargo test -- --ignored` due to global state conflicts
 fn test_with_annotations() {
     let client = CrashpadClient::new().expect("Failed to create client");
 

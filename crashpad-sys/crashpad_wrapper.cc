@@ -41,7 +41,12 @@ bool crashpad_client_start_handler(
     
     std::vector<std::string> arguments;
     bool restartable = true;
-    bool asynchronous_start = true;  // Start asynchronously to prevent hanging
+    // Linux doesn't support asynchronous start
+    #ifdef __linux__
+    bool asynchronous_start = false;
+    #else
+    bool asynchronous_start = true;  // Start asynchronously on other platforms
+    #endif
     
     return crashpad_client->StartHandler(
         handler,
