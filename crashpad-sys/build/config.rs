@@ -61,7 +61,7 @@ impl BuildConfig {
             .ok_or_else(|| ConfigError("Failed to find workspace root".to_string()))?
             .to_path_buf();
 
-        let platform = Platform::detect()?;
+        let platform = Platform::from_env()?;
 
         let depot_tools_path = workspace_root.join("third_party/depot_tools");
         let crashpad_checkout = workspace_root.join("third_party/crashpad_checkout");

@@ -3,12 +3,14 @@
 //! This module provides a clean, modular build system for Crashpad
 //! following Rust idioms and ARCHITECTURE.md principles.
 
+mod build_options;
 mod config;
 mod platform;
 
 use std::fs;
 use std::process::Command;
 
+pub use build_options::{BuildOptions, BuildType, LinkType};
 pub use config::{BuildConfig, ConfigError};
 pub use platform::Platform;
 
@@ -38,6 +40,7 @@ impl From<std::io::Error> for BuildError {
 /// Main builder for Crashpad
 pub struct CrashpadBuilder {
     config: BuildConfig,
+    options: BuildOptions,
 }
 
 impl CrashpadBuilder {
@@ -45,6 +48,7 @@ impl CrashpadBuilder {
     pub fn new() -> Result<Self, BuildError> {
         Ok(Self {
             config: BuildConfig::from_env()?,
+            options: BuildOptions::from_env(),
         })
     }
 
@@ -178,7 +182,16 @@ impl CrashpadBuilder {
     /// Configure and build Crashpad
     fn configure_and_build(&self) -> Result<(), BuildError> {
         let build_dir = self.config.build_dir();
-        let gn_args = self.config.platform.gn_args().join(" ");
+        let target = std::env::var("TARGET").unwrap_or_default();
+
+        // Generate GN args from BuildOptions
+        let gn_args = self
+            .options
+            .gn_args(&target)
+            .into_iter()
+            .map(|(k, v)| format!("{} = {}", k, v))
+            .collect::<Vec<_>>()
+            .join(" ");
 
         // Run gn gen
         if self.config.verbose() {
@@ -186,6 +199,7 @@ impl CrashpadBuilder {
                 "Running gn gen for {}...",
                 self.config.platform.build_name()
             );
+            eprintln!("GN args: {}", gn_args);
         }
 
         let status = Command::new("gn")
@@ -228,9 +242,22 @@ impl CrashpadBuilder {
             .env("PATH", self.config.path_with_depot_tools());
 
         // Add specific targets for iOS
-        if let Some(targets) = self.config.platform.ninja_targets() {
-            for target in targets {
-                ninja_cmd.arg(target);
+        if target.contains("ios") {
+            // iOS requires specific targets
+            for ios_target in [
+                "client:client",
+                "client:common",
+                "handler:common",
+                "util:util",
+                "util:net",
+                "util:mig_output",
+                "minidump:format",
+                "minidump:minidump",
+                "snapshot:context",
+                "snapshot:snapshot",
+                "third_party/mini_chromium/mini_chromium/base:base",
+            ] {
+                ninja_cmd.arg(ios_target);
             }
         }
 
@@ -265,13 +292,16 @@ impl CrashpadBuilder {
 
         let wrapper_obj = self.config.wrapper_obj_path();
         let wrapper_cc = self.config.manifest_dir.join("crashpad_wrapper.cc");
+        let target = std::env::var("TARGET").unwrap_or_default();
 
-        let mut cc_cmd = Command::new("c++");
+        // Get compiler from BuildOptions
+        let compiler = self.options.get_compiler(&target);
+        println!("cargo:warning=Using compiler: {}", compiler.display());
 
-        // Add platform-specific compile flags
-        for flag in self.config.platform.compile_flags() {
-            cc_cmd.arg(flag);
-        }
+        let mut cc_cmd = Command::new(&compiler);
+
+        // Add compile flags from BuildOptions
+        cc_cmd.args(&self.options.compiler_flags());
 
         // Add include paths
         cc_cmd.args([
@@ -285,9 +315,17 @@ impl CrashpadBuilder {
                 .unwrap(),
         ]);
 
-        // Add clang target if needed
-        if let Some(target) = self.config.platform.clang_target() {
-            cc_cmd.arg("-target").arg(target);
+        // Add clang target for iOS
+        if target.contains("ios") {
+            if target.contains("sim") {
+                if target.starts_with("aarch64") {
+                    cc_cmd.arg("-target").arg("arm64-apple-ios14.0-simulator");
+                } else if target.starts_with("x86_64") {
+                    cc_cmd.arg("-target").arg("x86_64-apple-ios14.0-simulator");
+                }
+            } else if target.starts_with("aarch64") {
+                cc_cmd.arg("-target").arg("arm64-apple-ios14.0");
+            }
         }
 
         // Output and input files
@@ -337,8 +375,12 @@ impl CrashpadBuilder {
         let lib_path = self.config.static_lib_path();
         let wrapper_obj = self.config.wrapper_obj_path();
         let obj_dir = self.config.obj_dir();
+        let target = std::env::var("TARGET").unwrap_or_default();
 
-        let status = match self.config.platform.archiver() {
+        // Get archiver from BuildOptions
+        let archiver = self.options.get_archiver(&target);
+
+        let status = match archiver.as_str() {
             "libtool" => {
                 let mut cmd = Command::new("libtool");
                 cmd.args([
@@ -349,7 +391,7 @@ impl CrashpadBuilder {
                 ]);
 
                 // For iOS, include additional libraries to avoid linking issues
-                if let Platform::Ios { .. } = self.config.platform {
+                if target.contains("ios") {
                     let handler_common = obj_dir.join("handler/libcommon.a");
                     let util_net = obj_dir.join("util/libnet.a");
 
@@ -383,7 +425,7 @@ impl CrashpadBuilder {
                  Make sure you have the required tools installed:\n\
                  - macOS/iOS: Xcode Command Line Tools\n\
                  - Linux: binutils package",
-                self.config.platform.archiver()
+                archiver
             )));
         }
 
@@ -453,18 +495,76 @@ impl CrashpadBuilder {
             println!("cargo:rustc-link-search=native={}", path.display());
         }
 
-        // Link static libraries
-        for lib in self.config.platform.link_libraries() {
-            println!("cargo:rustc-link-lib=static={lib}");
+        let target = std::env::var("TARGET").unwrap_or_default();
+
+        // Add Android NDK library path for C++ static libs
+        if target.contains("android") {
+            if let Some(ndk) = &self.options.ndk_path {
+                let target_triple = if target.starts_with("x86_64") {
+                    "x86_64-linux-android"
+                } else if target.starts_with("aarch64") {
+                    "aarch64-linux-android"
+                } else if target.starts_with("armv7") {
+                    "arm-linux-androideabi"
+                } else {
+                    "i686-linux-android"
+                };
+
+                let lib_path = ndk
+                    .join("toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib")
+                    .join(target_triple);
+
+                if lib_path.exists() {
+                    println!("cargo:rustc-link-search=native={}", lib_path.display());
+                }
+            }
         }
 
-        // Link system libraries
-        for lib in self.config.platform.system_libraries() {
-            println!("cargo:rustc-link-lib={lib}");
+        // Link libraries with proper prefix based on LinkType
+        let link_prefix = self.options.link_prefix();
+
+        // Crashpad libraries
+        for lib in [
+            "crashpad_wrapper",
+            "client",
+            "common",
+            "util",
+            "format",
+            "minidump",
+            "snapshot",
+            "context",
+            "base",
+        ] {
+            println!("cargo:rustc-link-lib={}{}", link_prefix, lib);
+        }
+
+        // Platform-specific system libraries
+        if target.contains("android") {
+            println!("cargo:rustc-link-lib=c++_static");
+            println!("cargo:rustc-link-lib=c++abi");
+            println!("cargo:rustc-link-lib=log");
+            println!("cargo:rustc-link-lib=dl");
+        } else if target.contains("linux") {
+            println!("cargo:rustc-link-lib=stdc++");
+            println!("cargo:rustc-link-lib=pthread");
+        } else if target.contains("apple-ios") {
+            println!("cargo:rustc-link-lib=c++");
+            println!("cargo:rustc-link-lib=z");
+            println!("cargo:rustc-link-lib=framework=Foundation");
+            println!("cargo:rustc-link-lib=framework=Security");
+            println!("cargo:rustc-link-lib=framework=CoreFoundation");
+            println!("cargo:rustc-link-lib=framework=UIKit");
+        } else if target.contains("apple") {
+            println!("cargo:rustc-link-lib=c++");
+            println!("cargo:rustc-link-lib=framework=Foundation");
+            println!("cargo:rustc-link-lib=framework=Security");
+            println!("cargo:rustc-link-lib=framework=CoreFoundation");
+            println!("cargo:rustc-link-lib=framework=IOKit");
+            println!("cargo:rustc-link-lib=dylib=bsm");
         }
 
         // Verify handler exists (for platforms that use external handler)
-        if !self.config.platform.is_in_process_handler() {
+        if !target.contains("ios") {
             let handler_path = self.config.handler_path();
             if !handler_path.exists() {
                 println!(

@@ -3,6 +3,20 @@
 //! Interactive command-line tool for testing Crashpad crash reporting functionality.
 //! Allows you to trigger crashes and verify that Crashpad captures them properly.
 
+// Android standalone executables need special handling
+// Due to -nodefaultlibs flag, we need to provide our own pthread_atfork
+#[cfg(target_os = "android")]
+#[no_mangle]
+pub extern "C" fn pthread_atfork(
+    _prepare: Option<extern "C" fn()>,
+    _parent: Option<extern "C" fn()>,
+    _child: Option<extern "C" fn()>,
+) -> i32 {
+    // Dummy implementation for testing
+    // In a real app, this would be provided by the Android runtime
+    0
+}
+
 use crashpad::{CrashpadClient, CrashpadConfig};
 use std::collections::HashMap;
 use std::env;
