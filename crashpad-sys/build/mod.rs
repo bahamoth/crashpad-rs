@@ -71,7 +71,7 @@ impl CrashpadBuilder {
             if self.config.verbose() {
                 eprintln!("Cloning depot_tools...");
             }
-            
+
             let status = Command::new("git")
                 .args([
                     "clone",
@@ -79,11 +79,12 @@ impl CrashpadBuilder {
                 ])
                 .arg(&self.config.depot_tools_path)
                 .status()
-                .map_err(|e| BuildError(format!(
-                    "Failed to execute git command for depot_tools: {}\n\
-                     Make sure git is installed and in your PATH.",
-                    e
-                )))?;
+                .map_err(|e| {
+                    BuildError(format!(
+                        "Failed to execute git command for depot_tools: {e}\n\
+                     Make sure git is installed and in your PATH."
+                    ))
+                })?;
 
             if !status.success() {
                 return Err(BuildError(format!(
@@ -102,7 +103,7 @@ impl CrashpadBuilder {
             if self.config.verbose() {
                 eprintln!("Setting up Crashpad...");
             }
-            
+
             fs::create_dir_all(&self.config.crashpad_checkout)?;
 
             // Write .gclient configuration
@@ -128,17 +129,20 @@ impl CrashpadBuilder {
                 ])
                 .current_dir(&self.config.crashpad_checkout)
                 .status()
-                .map_err(|e| BuildError(format!(
-                    "Failed to execute git command for crashpad: {}\n\
+                .map_err(|e| {
+                    BuildError(format!(
+                        "Failed to execute git command for crashpad: {}\n\
                      Working directory: {}",
-                    e,
-                    self.config.crashpad_checkout.display()
-                )))?;
+                        e,
+                        self.config.crashpad_checkout.display()
+                    ))
+                })?;
 
             if !status.success() {
                 return Err(BuildError(
                     "Failed to clone crashpad repository. \n\
-                     Please check your internet connection and try again.".to_string()
+                     Please check your internet connection and try again."
+                        .to_string(),
                 ));
             }
 
@@ -151,11 +155,12 @@ impl CrashpadBuilder {
                 .current_dir(&self.config.crashpad_checkout)
                 .env("PATH", self.config.path_with_depot_tools())
                 .status()
-                .map_err(|e| BuildError(format!(
-                    "Failed to execute gclient sync: {}\n\
-                     Make sure Python is installed and depot_tools is properly set up.",
-                    e
-                )))?;
+                .map_err(|e| {
+                    BuildError(format!(
+                        "Failed to execute gclient sync: {e}\n\
+                     Make sure Python is installed and depot_tools is properly set up."
+                    ))
+                })?;
 
             if !status.success() {
                 return Err(BuildError(format!(
@@ -182,22 +187,24 @@ impl CrashpadBuilder {
                 self.config.platform.build_name()
             );
         }
-        
+
         let status = Command::new("gn")
             .args([
                 "gen",
                 build_dir.to_str().unwrap(),
-                &format!("--args={}", gn_args),
+                &format!("--args={gn_args}"),
             ])
             .current_dir(&self.config.crashpad_dir)
             .env("PATH", self.config.path_with_depot_tools())
             .status()
-            .map_err(|e| BuildError(format!(
-                "Failed to execute gn command: {}\n\
+            .map_err(|e| {
+                BuildError(format!(
+                    "Failed to execute gn command: {}\n\
                  Working directory: {}",
-                e,
-                self.config.crashpad_dir.display()
-            )))?;
+                    e,
+                    self.config.crashpad_dir.display()
+                ))
+            })?;
 
         if !status.success() {
             return Err(BuildError(format!(
@@ -227,14 +234,14 @@ impl CrashpadBuilder {
             }
         }
 
-        let status = ninja_cmd
-            .status()
-            .map_err(|e| BuildError(format!(
+        let status = ninja_cmd.status().map_err(|e| {
+            BuildError(format!(
                 "Failed to execute ninja command: {}\n\
                  Build directory: {}",
                 e,
                 build_dir.display()
-            )))?;
+            ))
+        })?;
 
         if !status.success() {
             return Err(BuildError(format!(
@@ -255,12 +262,12 @@ impl CrashpadBuilder {
         if self.config.verbose() {
             eprintln!("Compiling wrapper.cc...");
         }
-        
+
         let wrapper_obj = self.config.wrapper_obj_path();
         let wrapper_cc = self.config.manifest_dir.join("crashpad_wrapper.cc");
 
         let mut cc_cmd = Command::new("c++");
-        
+
         // Add platform-specific compile flags
         for flag in self.config.platform.compile_flags() {
             cc_cmd.arg(flag);
@@ -290,15 +297,18 @@ impl CrashpadBuilder {
             wrapper_cc.to_str().unwrap(),
         ]);
 
-        let status = cc_cmd
-            .status()
-            .map_err(|e| BuildError(format!(
+        let status = cc_cmd.status().map_err(|e| {
+            BuildError(format!(
                 "Failed to execute C++ compiler: {}\n\
                  Compiler: c++\n\
                  Input file: {}",
                 e,
-                self.config.manifest_dir.join("crashpad_wrapper.cc").display()
-            )))?;
+                self.config
+                    .manifest_dir
+                    .join("crashpad_wrapper.cc")
+                    .display()
+            ))
+        })?;
 
         if !status.success() {
             return Err(BuildError(format!(
@@ -352,7 +362,7 @@ impl CrashpadBuilder {
                 }
 
                 cmd.status()
-                    .map_err(|e| BuildError(format!("Failed to create static library: {}", e)))?
+                    .map_err(|e| BuildError(format!("Failed to create static library: {e}")))?
             }
             "ar" => Command::new("ar")
                 .args([
@@ -361,9 +371,9 @@ impl CrashpadBuilder {
                     wrapper_obj.to_str().unwrap(),
                 ])
                 .status()
-                .map_err(|e| BuildError(format!("Failed to create static library: {}", e)))?,
+                .map_err(|e| BuildError(format!("Failed to create static library: {e}")))?,
             tool => {
-                return Err(BuildError(format!("Unknown archiver tool: {}", tool)));
+                return Err(BuildError(format!("Unknown archiver tool: {tool}")));
             }
         };
 
@@ -395,25 +405,31 @@ impl CrashpadBuilder {
             .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()));
 
         // For iOS simulator, specify the correct target
-        if let Platform::Ios { simulator: true, arch, .. } = &self.config.platform {
+        if let Platform::Ios {
+            simulator: true,
+            arch,
+            ..
+        } = &self.config.platform
+        {
             builder = builder.clang_arg("-target").clang_arg(match arch {
                 platform::Arch::Arm64 => "arm64-apple-ios-simulator",
                 platform::Arch::X64 => "x86_64-apple-ios-simulator",
-                _ => return Err(BuildError(format!(
-                    "Unsupported iOS simulator architecture: {:?}\n\
-                     Supported architectures: arm64, x86_64",
-                    arch
-                ))),
+                _ => {
+                    return Err(BuildError(format!(
+                        "Unsupported iOS simulator architecture: {arch:?}\n\
+                     Supported architectures: arm64, x86_64"
+                    )))
+                }
             });
         }
 
         let bindings = builder
             .generate()
-            .map_err(|e| BuildError(format!("Unable to generate bindings: {:?}", e)))?;
+            .map_err(|e| BuildError(format!("Unable to generate bindings: {e:?}")))?;
 
         bindings
             .write_to_file(self.config.bindings_path())
-            .map_err(|e| BuildError(format!("Couldn't write bindings: {}", e)))?;
+            .map_err(|e| BuildError(format!("Couldn't write bindings: {e}")))?;
 
         Ok(())
     }
@@ -439,12 +455,12 @@ impl CrashpadBuilder {
 
         // Link static libraries
         for lib in self.config.platform.link_libraries() {
-            println!("cargo:rustc-link-lib=static={}", lib);
+            println!("cargo:rustc-link-lib=static={lib}");
         }
 
         // Link system libraries
         for lib in self.config.platform.system_libraries() {
-            println!("cargo:rustc-link-lib={}", lib);
+            println!("cargo:rustc-link-lib={lib}");
         }
 
         // Verify handler exists (for platforms that use external handler)

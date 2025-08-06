@@ -45,7 +45,7 @@ impl FromStr for Arch {
             "aarch64" => Ok(Arch::Arm64),
             "arm" | "armv7" => Ok(Arch::Arm),
             "x86" => Ok(Arch::X86),
-            _ => Err(PlatformError(format!("Unsupported architecture: {}", s))),
+            _ => Err(PlatformError(format!("Unsupported architecture: {s}"))),
         }
     }
 }
@@ -65,8 +65,7 @@ impl Arch {
 impl Platform {
     /// Detect the current platform from environment variables
     pub fn detect() -> Result<Self, PlatformError> {
-        let target = env::var("TARGET")
-            .map_err(|_| PlatformError("TARGET not set".to_string()))?;
+        let target = env::var("TARGET").map_err(|_| PlatformError("TARGET not set".to_string()))?;
         let os = env::var("CARGO_CFG_TARGET_OS")
             .map_err(|_| PlatformError("CARGO_CFG_TARGET_OS not set".to_string()))?;
         let arch_str = env::var("CARGO_CFG_TARGET_ARCH")
@@ -81,8 +80,9 @@ impl Platform {
                 simulator: target.contains("sim"),
             }),
             "android" => {
-                let ndk_path = env::var("ANDROID_NDK_HOME")
-                    .map_err(|_| PlatformError("ANDROID_NDK_HOME not set for Android build".to_string()))?;
+                let ndk_path = env::var("ANDROID_NDK_HOME").map_err(|_| {
+                    PlatformError("ANDROID_NDK_HOME not set for Android build".to_string())
+                })?;
                 Ok(Platform::Android {
                     arch,
                     ndk_path: PathBuf::from(ndk_path),
@@ -94,7 +94,7 @@ impl Platform {
                     .unwrap_or(false);
                 Ok(Platform::Windows { arch, msvc })
             }
-            _ => Err(PlatformError(format!("Unsupported OS: {}", os))),
+            _ => Err(PlatformError(format!("Unsupported OS: {os}"))),
         }
     }
 
@@ -223,12 +223,7 @@ impl Platform {
 
     /// Get static libraries to link
     pub fn link_libraries(&self) -> Vec<&'static str> {
-        let mut libs = vec![
-            "crashpad_wrapper",
-            "client",
-            "common",
-            "util",
-        ];
+        let mut libs = vec!["crashpad_wrapper", "client", "common", "util"];
 
         // MIG is only for macOS/iOS
         match self {
@@ -238,13 +233,7 @@ impl Platform {
             _ => {}
         }
 
-        libs.extend(&[
-            "format",
-            "minidump",
-            "snapshot",
-            "context",
-            "base",
-        ]);
+        libs.extend(&["format", "minidump", "snapshot", "context", "base"]);
 
         libs
     }

@@ -12,7 +12,7 @@ mod build;
 /// - Testable, maintainable code structure
 fn main() {
     if let Err(e) = build::CrashpadBuilder::new().and_then(|builder| builder.build()) {
-        eprintln!("Build failed: {}", e);
+        eprintln!("Build failed: {e}");
         std::process::exit(1);
     }
 }
