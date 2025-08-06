@@ -151,7 +151,7 @@ impl BuildOptions {
         } else {
             "x64" // default
         };
-        args.push(("target_cpu".to_string(), format!("\"{}\"", cpu)));
+        args.push(("target_cpu".to_string(), format!("\"{cpu}\"")));
 
         args
     }

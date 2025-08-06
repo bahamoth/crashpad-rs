@@ -10,7 +10,7 @@ mod platform;
 use std::fs;
 use std::process::Command;
 
-pub use build_options::{BuildOptions, BuildType, LinkType};
+pub use build_options::BuildOptions;
 pub use config::{BuildConfig, ConfigError};
 pub use platform::Platform;
 
@@ -189,7 +189,7 @@ impl CrashpadBuilder {
             .options
             .gn_args(&target)
             .into_iter()
-            .map(|(k, v)| format!("{} = {}", k, v))
+            .map(|(k, v)| format!("{k} = {v}"))
             .collect::<Vec<_>>()
             .join(" ");
 
@@ -199,7 +199,7 @@ impl CrashpadBuilder {
                 "Running gn gen for {}...",
                 self.config.platform.build_name()
             );
-            eprintln!("GN args: {}", gn_args);
+            eprintln!("GN args: {gn_args}");
         }
 
         let status = Command::new("gn")
@@ -301,7 +301,7 @@ impl CrashpadBuilder {
         let mut cc_cmd = Command::new(&compiler);
 
         // Add compile flags from BuildOptions
-        cc_cmd.args(&self.options.compiler_flags());
+        cc_cmd.args(self.options.compiler_flags());
 
         // Add include paths
         cc_cmd.args([
@@ -421,11 +421,10 @@ impl CrashpadBuilder {
 
         if !status.success() {
             return Err(BuildError(format!(
-                "Failed to create static library with {}.\n\
+                "Failed to create static library with {archiver}.\n\
                  Make sure you have the required tools installed:\n\
                  - macOS/iOS: Xcode Command Line Tools\n\
-                 - Linux: binutils package",
-                archiver
+                 - Linux: binutils package"
             )));
         }
 
@@ -535,7 +534,7 @@ impl CrashpadBuilder {
             "context",
             "base",
         ] {
-            println!("cargo:rustc-link-lib={}{}", link_prefix, lib);
+            println!("cargo:rustc-link-lib={link_prefix}{lib}");
         }
 
         // Platform-specific system libraries
