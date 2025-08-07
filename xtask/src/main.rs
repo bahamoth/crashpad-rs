@@ -28,6 +28,8 @@ enum Commands {
     Test,
     /// Clean build artifacts
     Clean,
+    /// Install external development tools
+    InstallTools,
 }
 
 fn main() -> Result<()> {
@@ -39,6 +41,7 @@ fn main() -> Result<()> {
         Commands::Dist { output } => dist(&sh, &output)?,
         Commands::Test => test(&sh)?,
         Commands::Clean => clean(&sh)?,
+        Commands::InstallTools => install_tools(&sh)?,
     }
 
     Ok(())
@@ -279,4 +282,73 @@ fn detect_platform() -> (&'static str, &'static str) {
     };
 
     (os, arch)
+}
+
+struct Tool {
+    name: &'static str,
+    check_cmd: &'static str,
+    install_cmd: &'static str,
+    description: &'static str,
+}
+
+fn install_tools(sh: &Shell) -> Result<()> {
+    println!("Installing external development tools...\n");
+
+    let tools = vec![
+        Tool {
+            name: "cargo-nextest",
+            check_cmd: "cargo nextest --version",
+            install_cmd: "cargo install cargo-nextest",
+            description: "Test runner with process isolation",
+        },
+        Tool {
+            name: "cargo-ndk",
+            check_cmd: "cargo ndk --version",
+            install_cmd: "cargo install cargo-ndk",
+            description: "Android NDK cross-compilation helper",
+        },
+    ];
+
+    let mut installed_count = 0;
+    let mut already_installed_count = 0;
+
+    for tool in &tools {
+        print!("Checking {}... ", tool.name);
+        // xshell의 cmd!는 literal string만 받으므로 직접 실행
+        let check_result = sh.cmd("sh").arg("-c").arg(tool.check_cmd).quiet().read();
+
+        match check_result {
+            Ok(version) => {
+                // 첫 줄만 가져오기 (버전 정보)
+                let version_line = version.lines().next().unwrap_or(&version);
+                println!("✓ Already installed ({})", version_line.trim());
+                already_installed_count += 1;
+            }
+            Err(_) => {
+                println!("Not found. Installing...");
+                sh.cmd("sh")
+                    .arg("-c")
+                    .arg(tool.install_cmd)
+                    .run()
+                    .with_context(|| format!("Failed to install {}", tool.name))?;
+                println!("  ✓ {} installed successfully", tool.name);
+                installed_count += 1;
+            }
+        }
+    }
+
+    println!("\n✅ All tools ready!");
+    if installed_count > 0 {
+        println!("  {installed_count} tool(s) newly installed");
+    }
+    if already_installed_count > 0 {
+        println!("  {already_installed_count} tool(s) already installed");
+    }
+
+    println!("\nAvailable tools:");
+    for tool in &tools {
+        println!("  • {}: {}", tool.name, tool.description);
+    }
+
+    Ok(())
 }

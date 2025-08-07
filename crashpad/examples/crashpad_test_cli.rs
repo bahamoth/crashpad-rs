@@ -31,48 +31,46 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("✓ Created Crashpad client");
 
     // Configure Crashpad with idiomatic builder pattern
-    let handler_path = if cfg!(debug_assertions) {
-        // Development: explicitly specify the path
-        let manifest_dir = env!("CARGO_MANIFEST_DIR");
-        // CARGO_MANIFEST_DIR is the crashpad crate directory
-        let workspace_root = std::path::Path::new(manifest_dir)
-            .parent() // crashpad -> workspace root
-            .unwrap();
-
-        let platform = format!("{}-{}", env::consts::OS, env::consts::ARCH);
-
-        let handler_name = if cfg!(target_os = "windows") {
-            "crashpad_handler.exe"
-        } else {
-            "crashpad_handler"
-        };
-
-        let handler_path = workspace_root
-            .join("third_party/crashpad_checkout/crashpad/out")
-            .join(&platform)
-            .join(handler_name);
-
-        println!(
-            "Development mode: using handler at {}",
-            handler_path.display()
-        );
-        handler_path
-    } else {
-        // Production: expect handler in same directory as executable
+    // Handler is now copied to target/{profile}/ or target/{target}/{profile}/
+    let handler_path = if cfg!(target_os = "android") {
+        // On Android, handler needs lib prefix and .so extension for APK
         let exe_path = std::env::current_exe()?;
         let exe_dir = exe_path.parent().unwrap();
-        let handler_name = if cfg!(target_os = "windows") {
-            "crashpad_handler.exe"
+        exe_dir.join("libcrashpad_handler.so")
+    } else {
+        // On desktop platforms, handler is in parent directory (target/debug/)
+        // while examples are in target/debug/examples/
+        let exe_path = std::env::current_exe()?;
+        let exe_dir = exe_path.parent().unwrap();
+
+        // Check if we're in examples directory
+        if exe_dir.file_name() == Some(std::ffi::OsStr::new("examples")) {
+            // Go up one level to find handler
+            let handler_name = if cfg!(windows) {
+                "crashpad_handler.exe"
+            } else {
+                "crashpad_handler"
+            };
+            exe_dir.parent().unwrap().join(handler_name)
         } else {
-            "crashpad_handler"
-        };
-        exe_dir.join(handler_name)
+            // Same directory
+            let handler_name = if cfg!(windows) {
+                "crashpad_handler.exe"
+            } else {
+                "crashpad_handler"
+            };
+            exe_dir.join(handler_name)
+        }
     };
 
+    println!("Using handler at: {}", handler_path.display());
+
+    let exe_path = std::env::current_exe()?;
+    let exe_dir = exe_path.parent().unwrap();
     let config = CrashpadConfig::builder()
         .handler_path(handler_path)
-        .database_path("./crashpad_database")
-        .metrics_path("./crashpad_metrics")
+        .database_path(exe_dir.join("crashpad_database"))
+        .metrics_path(exe_dir.join("crashpad_metrics"))
         // .url("https://your-crash-server.com/submit")  // Optional
         .build();
 

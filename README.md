@@ -105,12 +105,18 @@ let config = CrashpadConfig::builder()
 
 ## Building from Source
 
-### Standard Build
+### Setup Development Environment
 ```bash
 # Clone the repository
 git clone https://github.com/bahamoth/crashpad-rs
 cd crashpad-rs
 
+# Install external development tools (cargo-nextest, etc.)
+cargo xtask install-tools
+```
+
+### Standard Build
+```bash
 # Build (automatically downloads dependencies)
 cargo build --release
 
@@ -140,11 +146,45 @@ cargo build --target aarch64-apple-ios
 
 See [Cross-Compilation Guide](CONVENTIONS.md#cross-compilation) for detailed instructions.
 
+## Testing
+
+### Using cargo-nextest (Recommended)
+For proper test isolation (required for Crashpad's global state), use cargo-nextest:
+
+```bash
+# Install nextest
+cargo install cargo-nextest
+
+# Run all tests with process isolation
+cargo nextest run
+
+# Run specific test suite
+cargo nextest run -p crashpad
+
+# Run ignored tests too
+cargo nextest run --run-ignored all
+```
+
+### Standard cargo test
+```bash
+# Unit tests only (integration tests may conflict)
+cargo test --lib
+```
+
 ## Examples
 
 ### Basic Example
 ```bash
 cargo run --example crashpad_test_cli
+```
+
+### Crash Test Example
+```bash
+# Run without crash
+cargo run --example crash_test
+
+# Trigger actual crash (generates minidump)
+cargo run --example crash_test -- --crash
 ```
 
 ### iOS Simulator Test

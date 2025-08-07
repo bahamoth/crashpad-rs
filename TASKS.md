@@ -63,12 +63,14 @@ Copy this template and increment the ID:
 | T-003 | Create comprehensive FFI documentation | TODO | - | wrapper.h | Document all exposed C++ functions |
 | T-004 | Implement Android NDK cross-compilation tests | TODO | - | CROSS_COMPILE.md | Android support added but needs testing |
 | T-005 | Add CI/CD pipeline with GitHub Actions | TODO | - | - | Build and test on all supported platforms |
+| T-006 | Refactor crashpad-sys build system for platform consistency | DOING | architect-thor | build_refactor_plan.md | Unify platform-specific build configurations, fix compiler/linker mismatches |
 
 ### Task Assignment History
 
 | Date | Task | From | To | Reason |
 |------|------|------|----|--------|
 | - | - | - | - | Initial task list created |
+| 2025-08-07 | T-006 | - | architect-thor | Assigned build system refactoring task |
 
 ## Related Documents
 

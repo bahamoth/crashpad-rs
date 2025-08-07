@@ -1,0 +1,12 @@
+# Nextest configuration for crashpad-rs
+# https://nexte.st/book/configuration
+
+[profile.default]
+# Run tests in parallel but with process isolation
+test-threads = "num-cpus"
+retries = { backoff = "exponential", count = 2, delay = "1s" }
+
+[profile.ci]
+# CI-specific settings
+test-threads = 4
+fail-fast = false

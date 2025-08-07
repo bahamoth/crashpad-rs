@@ -74,7 +74,9 @@ impl CrashpadConfig {
             // Fallback: look in same directory as executable
             if let Ok(exe_path) = env::current_exe() {
                 if let Some(exe_dir) = exe_path.parent() {
-                    let handler_name = if cfg!(windows) {
+                    let handler_name = if cfg!(target_os = "android") {
+                        "libcrashpad_handler.so"
+                    } else if cfg!(windows) {
                         "crashpad_handler.exe"
                     } else {
                         "crashpad_handler"
