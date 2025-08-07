@@ -113,6 +113,9 @@ cargo build --package crashpad
 
 # Build everything in release mode
 cargo build --release
+
+# Create distribution package with handler
+cargo xtask dist
 ```
 
 ### Clean Build
@@ -193,23 +196,42 @@ cross build --target x86_64-unknown-linux-gnu
 
 ## Testing
 
-We use cargo-nextest for all tests because Crashpad's out-of-process handler requires isolated process execution:
+### Quick Test Commands
 
 ```bash
-# Run all tests
+# Run only unit tests (fast, no handler needed)
+cargo test --lib
+
+# Run only integration tests with process isolation (needs handler)
+cargo nextest run --test '*'
+
+# Run all tests with nextest
 cargo nextest run
+```
 
-# Run specific package tests
-cargo nextest run -p crashpad
+### Detailed Testing
 
-# Run with verbose output
+We use cargo-nextest for integration tests because Crashpad's out-of-process handler requires isolated process execution:
+
+```bash
+# Unit tests only (in src/ files)
+cargo test --lib
+cargo test --lib -p crashpad  # Specific package
+
+# Integration tests only (in tests/ directory)
+cargo nextest run --test '*'
+cargo nextest run --test integration_test  # Specific test file
+cargo nextest run --test macos_test  # Platform-specific tests
+
+# All tests
+cargo nextest run
+cargo nextest run -p crashpad  # Specific package
+
+# With verbose output
 cargo nextest run --verbose
 
 # Run ignored tests
 cargo nextest run --run-ignored all
-
-# macOS-specific tests
-cargo nextest run -p crashpad --test macos_test
 ```
 
 ### Platform-Specific Tests

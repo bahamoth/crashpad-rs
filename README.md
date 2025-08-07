@@ -2,25 +2,6 @@
 
 Rust bindings for Google Crashpad crash reporting system.
 
-## ⚠️ Important: Android Build Requirements
-
-**Android builds require creating symlinks for NDK r22+ compatibility:**
-
-NDK r22 and later removed standalone toolchain binaries (e.g., `aarch64-linux-android-ar`) in favor of LLVM tools. You must create symlinks to ensure compatibility:
-
-```bash
-# Navigate to your NDK toolchain directory
-cd $ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin
-
-# Create symlinks for each target architecture
-ln -sf llvm-ar aarch64-linux-android-ar
-ln -sf llvm-ar arm-linux-androideabi-ar
-ln -sf llvm-ar i686-linux-android-ar
-ln -sf llvm-ar x86_64-linux-android-ar
-```
-
-**Without these symlinks, Android builds will fail with "ar not found" errors.**
-
 ## Features
 
 - **Cross-platform**: macOS, Linux, Windows, iOS, Android
@@ -68,6 +49,79 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
+## Configuration
+
+### Basic Configuration (Local Only)
+```rust
+// Minimal config - crashes saved locally, no upload
+let config = CrashpadConfig::builder()
+    .handler_path("./crashpad_handler")  // Required on desktop platforms
+    .database_path("./crash_dumps")      // Where to store crash dumps
+    .build();
+```
+
+### Production Configuration
+```rust
+// Full configuration with upload server
+let config = CrashpadConfig::builder()
+    .handler_path(std::env::var("CRASHPAD_HANDLER")
+        .unwrap_or_else(|_| "./crashpad_handler".to_string()))
+    .database_path("/var/crash/myapp")
+    .metrics_path("/var/metrics/myapp")  // Optional: metrics storage
+    .url("https://crashes.example.com/api/minidump")
+    .rate_limit(true)  // Limit upload frequency
+    .compress_uploads(true)  // Compress before uploading
+    .build();
+```
+
+### Platform-Specific Configuration
+
+#### Desktop (macOS/Linux/Windows)
+```rust
+// Handler path is required for desktop platforms
+let config = CrashpadConfig::builder()
+    .handler_path("./crashpad_handler")  // Must point to handler executable
+    .database_path("./crashes")
+    .build();
+```
+
+#### iOS/tvOS/watchOS
+```rust
+// iOS uses in-process handler - no handler_path needed
+let config = CrashpadConfig::builder()
+    .database_path("./crashes")  // Relative to app's Documents directory
+    .url("https://crashes.example.com/api/minidump")
+    .build();
+```
+
+#### Android
+```rust
+// Android can use external handler (as .so file in APK)
+let config = CrashpadConfig::builder()
+    .handler_path("./libcrashpad_handler.so")  // Renamed for APK distribution
+    .database_path("/data/data/com.example.app/crashes")
+    .build();
+```
+
+### Environment-Based Configuration
+```rust
+// Adjust configuration based on environment
+let config = if cfg!(debug_assertions) {
+    // Development: local storage only
+    CrashpadConfig::builder()
+        .handler_path("./target/debug/crashpad_handler")
+        .database_path("./dev_crashes")
+        .build()
+} else {
+    // Production: with upload server
+    CrashpadConfig::builder()
+        .handler_path("/usr/local/bin/crashpad_handler")
+        .database_path("/var/crash/myapp")
+        .url("https://crashes.example.com/submit")
+        .build()
+};
+```
+
 ## Platform Support
 
 | Platform | Architecture | Status | Handler Type |
@@ -78,119 +132,75 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 | iOS | arm64, x86_64 sim | ✅ Stable | In-process |
 | Android | arm, arm64, x86, x86_64 | ✅ Stable | External/In-process |
 
-## Handler Integration
-
-The `crashpad_handler` executable must be available at runtime:
-
-### Option 1: Same Directory (Recommended)
-Place `crashpad_handler` in the same directory as your application:
-```
-my-app/
-├── my-app
-└── crashpad_handler
-```
-
-### Option 2: Environment Variable
-```bash
-export CRASHPAD_HANDLER=/path/to/crashpad_handler
-./my-app
-```
-
-### Option 3:  Custom Path
-```rust
-let config = CrashpadConfig::builder()
-    .handler_path("/custom/path/crashpad_handler")
-    .build();
-```
-
-## Building from Source
-
-### Setup Development Environment
-```bash
-# Clone the repository
-git clone https://github.com/bahamoth/crashpad-rs
-cd crashpad-rs
-
-# Install external development tools (cargo-nextest, etc.)
-cargo xtask install-tools
-```
-
-### Standard Build
-```bash
-# Build (automatically downloads dependencies)
-cargo build --release
-
-# Create distribution package
-cargo xtask dist
-```
-
-### Cross-Compilation
-
-#### Android
-```bash
-# Install cargo-ndk
-cargo install cargo-ndk
-
-# Build for Android (after setting up NDK symlinks)
-cargo ndk -t arm64-v8a build --package crashpad
-```
-
-#### iOS
-```bash
-# Add target
-rustup target add aarch64-apple-ios
-
-# Build
-cargo build --target aarch64-apple-ios
-```
-
-See [Cross-Compilation Guide](CONVENTIONS.md#cross-compilation) for detailed instructions.
-
-## Testing
-
-### Using cargo-nextest (Recommended)
-For proper test isolation (required for Crashpad's global state), use cargo-nextest:
-
-```bash
-# Install nextest
-cargo install cargo-nextest
-
-# Run all tests with process isolation
-cargo nextest run
-
-# Run specific test suite
-cargo nextest run -p crashpad
-
-# Run ignored tests too
-cargo nextest run --run-ignored all
-```
-
-### Standard cargo test
-```bash
-# Unit tests only (integration tests may conflict)
-cargo test --lib
-```
-
 ## Examples
 
-### Basic Example
-```bash
-cargo run --example crashpad_test_cli
-```
+### Running the Test Example
 
-### Crash Test Example
-```bash
-# Run without crash
-cargo run --example crash_test
+1. **Build the example and handler**
+   ```bash
+   # Build everything including the handler
+   cargo build --example crashpad_test_cli
+   
+   # The handler will be at: target/debug/crashpad_handler
+   # The example will be at: target/debug/examples/crashpad_test_cli
+   ```
 
-# Trigger actual crash (generates minidump)
-cargo run --example crash_test -- --crash
-```
+2. **Run with handler in same directory** (easiest)
+   ```bash
+   # Copy handler to current directory
+   cp target/debug/crashpad_handler .
+   
+   # Run the example (will look for handler in current directory as fallback)
+   ./target/debug/examples/crashpad_test_cli
+   ```
 
-### iOS Simulator Test
-```bash
-cargo build --target aarch64-apple-ios-sim --example ios_simulator_test
-```
+3. **Run with environment variable**
+   ```bash
+   # Set handler path explicitly
+   export CRASHPAD_HANDLER=target/debug/crashpad_handler
+   
+   # Run from anywhere
+   cargo run --example crashpad_test_cli
+   ```
+
+4. **Run directly with cargo** (if handler is in PATH or current directory)
+   ```bash
+   # If you have crashpad_handler in current directory or PATH
+   cargo run --example crashpad_test_cli
+   ```
+
+**Note**: The example looks for the handler in this order:
+1. Path specified in config (if provided)
+2. `CRASHPAD_HANDLER` environment variable
+3. Same directory as the executable (fallback)
+4. Current working directory (fallback)
+
+### Handler Deployment
+
+The `crashpad_handler` executable must be available at runtime. Common approaches:
+
+1. **Same directory as application** (simplest)
+   ```
+   my-app/
+   ├── my-app
+   └── crashpad_handler
+   ```
+
+2. **System path** (for installed applications)
+   ```
+   /usr/local/bin/crashpad_handler
+   ```
+
+3. **Environment variable** (flexible deployment)
+   ```bash
+   export CRASHPAD_HANDLER=/opt/myapp/bin/crashpad_handler
+   ```
+
+4. **Bundled in package** (platform-specific)
+   - macOS: Inside .app bundle
+   - Linux: In AppImage or snap
+   - Android: As .so file in APK
+   - iOS: Not needed (in-process)
 
 ## Documentation
 
@@ -200,23 +210,18 @@ cargo build --target aarch64-apple-ios-sim --example ios_simulator_test
 - [Platform Notes](CONVENTIONS.md#platform-specific-integration) - Platform-specific considerations
 
 ### For Contributors
-- [Project Overview](OVERVIEW.md) - Architecture and project structure
-- [Development Conventions](CONVENTIONS.md) - Coding standards and workflows
+- [Development Guide](DEVELOPING.md) - Build, test, and contribute
 - [Architecture](ARCHITECTURE.md) - Technical design decisions
-- [PRD](PRD.md) - Product requirements and roadmap
-- [Current Tasks](TASKS.md) - Active development work
+- [Conventions](CONVENTIONS.md) - Coding standards
 
 ## Troubleshooting
 
 ### Handler Not Found
 - Verify handler executable exists and has execute permissions
 - Check `CRASHPAD_HANDLER` environment variable
+- Explicitly set path in config: `.handler_path("/path/to/crashpad_handler")`
 - Ensure handler architecture matches application
 
-### Android Build Failures
-- Verify NDK symlinks are created (see top of README)
-- Check `ANDROID_NDK_HOME` is set correctly
-- Use `cargo ndk` for simplified builds
 
 ### Crashes Not Being Captured
 - Confirm handler process is running
@@ -233,7 +238,7 @@ at your option.
 
 ## Contributing
 
-Contributions are welcome! Please read our [Contributing Guide](CONTRIBUTING.md) and [Development Conventions](CONVENTIONS.md).
+Contributions are welcome! See [DEVELOPING.md](DEVELOPING.md) for build and test instructions.
 
 ## Support
 

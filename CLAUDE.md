@@ -44,7 +44,8 @@ Claude Code guidance for crashpad-rs - Rust bindings for Google Crashpad.
   ```bash
   cargo fmt --all
   cargo clippy --all-targets --all-features -- -D warnings
-  cargo test
+  cargo test --lib  # Fast unit tests
+  cargo nextest run --test '*'  # Integration tests with isolation
   ```
 - **ONLY THEN**: Create your commit following [Conventional Commits](./CONVENTIONS.md#commit-messages)
 
@@ -91,7 +92,8 @@ Date: {YYYY-MM-DD}
 ## Pre-Commit Validation
 - [ ] Run `cargo fmt --all`
 - [ ] Run `cargo clippy --all-targets --all-features -- -D warnings`
-- [ ] Run `cargo test`
+- [ ] Run `cargo test --lib` (unit tests)
+- [ ] Run `cargo nextest run --test '*'` (integration tests)
 - [ ] Self-review changes
 
 ## Cross-Platform Check
@@ -188,7 +190,8 @@ make clean
 cargo build
 
 # Run tests
-cargo test
+cargo test --lib  # Unit tests only
+cargo nextest run --test '*'  # Integration tests with isolation
 
 # Format and lint
 cargo fmt --all

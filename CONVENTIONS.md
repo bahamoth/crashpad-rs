@@ -17,7 +17,7 @@ This document defines the development standards and practices for the crashpad-r
 |----------|------|--------|-------------|----------|
 | Code Format | rustfmt | Default | Manual | ⚠️ TODO |
 | Linting | clippy | Default | Manual | ⚠️ TODO |
-| Testing | cargo test | Cargo.toml | Manual | ⚠️ TODO |
+| Testing | cargo nextest | Cargo.toml | Manual | ✅ |
 | Commits | Conventional | Manual | None | ⚠️ TODO |
 | Dependencies | cargo/gclient | build.rs | Build step | ✅ |
 
@@ -127,7 +127,8 @@ make clean
 cargo build
 
 # Run tests
-cargo test
+cargo test --lib  # Unit tests only
+cargo nextest run --test '*'  # Integration tests with isolation
 
 # Create distribution package
 make dist
@@ -253,17 +254,23 @@ cargo build --target x86_64-pc-windows-gnu
 
 ### Running Tests
 ```bash
+# Unit tests only (fast)
+cargo test --lib
+
+# Integration tests with process isolation
+cargo nextest run --test '*'
+
 # All tests
-cargo test
+cargo nextest run
 
 # Specific package
-cargo test --package crashpad
+cargo nextest run -p crashpad
 
 # With output
-cargo test -- --nocapture
+cargo test --lib -- --nocapture
 
 # Platform-specific
-cargo test --target aarch64-apple-ios-sim
+cargo build --target aarch64-apple-ios-sim --example ios_simulator_test
 ```
 
 ### Coverage Goals
@@ -363,7 +370,7 @@ cargo audit fix
 
 - [ ] Code formatted (`cargo fmt --all`)
 - [ ] Clippy passes (`cargo clippy --all-targets`)
-- [ ] Tests pass (`cargo test`)
+- [ ] Tests pass (`cargo test --lib && cargo nextest run --test '*'`)
 - [ ] Documentation updated (`cargo doc`)
 - [ ] Cross-platform builds verified
 - [ ] CHANGELOG updated
