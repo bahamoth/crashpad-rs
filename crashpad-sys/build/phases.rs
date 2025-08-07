@@ -364,6 +364,7 @@ impl BuildPhases {
             "client",
             "common",
             "util",
+            "mig_output", // MIG-generated code for macOS
             "format",
             "minidump",
             "snapshot",

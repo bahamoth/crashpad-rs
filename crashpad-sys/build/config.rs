@@ -6,6 +6,7 @@
 use std::collections::HashMap;
 use std::env;
 use std::path::PathBuf;
+use std::process::Command;
 
 #[derive(Debug, Clone)]
 pub struct BuildConfig {
@@ -182,10 +183,31 @@ impl BuildConfig {
         self.compiler = PathBuf::from("clang++");
         self.cxx_flags = vec![
             "-std=c++17".to_string(),
-            format!("-target={}", ios_target),
+            format!("--target={}", ios_target),
             "-fno-exceptions".to_string(),
             "-fno-rtti".to_string(),
         ];
+
+        // Add iOS SDK path
+        if let Ok(output) = Command::new("xcrun")
+            .args([
+                "--sdk",
+                if target.contains("sim") {
+                    "iphonesimulator"
+                } else {
+                    "iphoneos"
+                },
+                "--show-sdk-path",
+            ])
+            .output()
+        {
+            if output.status.success() {
+                if let Ok(sdk_path) = String::from_utf8(output.stdout) {
+                    self.cxx_flags.push("-isysroot".to_string());
+                    self.cxx_flags.push(sdk_path.trim().to_string());
+                }
+            }
+        }
 
         // iOS uses libtool
         self.archiver = "libtool".to_string();

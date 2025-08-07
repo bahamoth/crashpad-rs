@@ -65,9 +65,9 @@ fn main() {
     println!("4. Exit normally");
     println!("5. Check crash dump status");
 
-    // For testing in simulator, check dump status instead of crashing
-    println!("\nChecking crash dump status...");
-    let choice = "5";
+    // Actually trigger a crash for testing
+    println!("\nTriggering crash for testing...");
+    let choice = "2"; // Null pointer dereference
 
     match choice {
         "1" => {
