@@ -20,7 +20,7 @@ impl BuildPhases {
 
     /// Phase 1: Prepare dependencies (depot_tools, crashpad source)
     pub fn prepare(&self) -> Result<(), Box<dyn std::error::Error>> {
-        // Ensure depot_tools is available
+        // Ensure depot_tools is available with correct version
         if !self.config.depot_tools.exists() {
             if self.config.verbose {
                 eprintln!("Cloning depot_tools...");
@@ -37,9 +37,61 @@ impl BuildPhases {
             if !status.success() {
                 return Err("Failed to clone depot_tools".into());
             }
+
+            // Checkout specific version
+            let depot_tools_commit = self.config.depot_tools_commit();
+            if self.config.verbose {
+                eprintln!("Checking out depot_tools commit: {depot_tools_commit}");
+            }
+
+            let status = Command::new("git")
+                .args(["checkout", &depot_tools_commit])
+                .current_dir(&self.config.depot_tools)
+                .status()?;
+
+            if !status.success() {
+                return Err(
+                    format!("Failed to checkout depot_tools commit {depot_tools_commit}").into(),
+                );
+            }
+        } else {
+            // Check if we have the right version
+            let depot_tools_commit = self.config.depot_tools_commit();
+            let output = Command::new("git")
+                .args(["rev-parse", "HEAD"])
+                .current_dir(&self.config.depot_tools)
+                .output()?;
+
+            let current = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            if current != depot_tools_commit {
+                if self.config.verbose {
+                    eprintln!(
+                        "depot_tools version mismatch. Current: {current}, Expected: {depot_tools_commit}"
+                    );
+                    eprintln!("Updating depot_tools to correct version...");
+                }
+
+                // Fetch and checkout
+                Command::new("git")
+                    .args(["fetch", "origin"])
+                    .current_dir(&self.config.depot_tools)
+                    .status()?;
+
+                let status = Command::new("git")
+                    .args(["checkout", &depot_tools_commit])
+                    .current_dir(&self.config.depot_tools)
+                    .status()?;
+
+                if !status.success() {
+                    return Err(format!(
+                        "Failed to update depot_tools to commit {depot_tools_commit}"
+                    )
+                    .into());
+                }
+            }
         }
 
-        // Ensure crashpad is available
+        // Ensure crashpad is available with correct version
         if !self.config.crashpad_dir.exists() {
             if self.config.verbose {
                 eprintln!("Setting up Crashpad...");
@@ -75,6 +127,21 @@ impl BuildPhases {
                 return Err("Failed to clone crashpad repository".into());
             }
 
+            // Checkout specific version
+            let crashpad_commit = self.config.crashpad_commit();
+            if self.config.verbose {
+                eprintln!("Checking out crashpad commit: {crashpad_commit}");
+            }
+
+            let status = Command::new("git")
+                .args(["checkout", &crashpad_commit])
+                .current_dir(&self.config.crashpad_dir)
+                .status()?;
+
+            if !status.success() {
+                return Err(format!("Failed to checkout crashpad commit {crashpad_commit}").into());
+            }
+
             // Run gclient sync
             if self.config.verbose {
                 eprintln!("Running gclient sync...");
@@ -88,6 +155,55 @@ impl BuildPhases {
 
             if !status.success() {
                 return Err("Failed to run gclient sync".into());
+            }
+        } else {
+            // Check if we have the right version
+            let crashpad_commit = self.config.crashpad_commit();
+            let output = Command::new("git")
+                .args(["rev-parse", "HEAD"])
+                .current_dir(&self.config.crashpad_dir)
+                .output()?;
+
+            let current = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            if current != crashpad_commit {
+                if self.config.verbose {
+                    eprintln!(
+                        "Crashpad version mismatch. Current: {current}, Expected: {crashpad_commit}"
+                    );
+                    eprintln!("Updating crashpad to correct version...");
+                }
+
+                // Fetch and checkout
+                Command::new("git")
+                    .args(["fetch", "origin"])
+                    .current_dir(&self.config.crashpad_dir)
+                    .status()?;
+
+                let status = Command::new("git")
+                    .args(["checkout", &crashpad_commit])
+                    .current_dir(&self.config.crashpad_dir)
+                    .status()?;
+
+                if !status.success() {
+                    return Err(
+                        format!("Failed to update crashpad to commit {crashpad_commit}").into(),
+                    );
+                }
+
+                // Re-run gclient sync for the new version
+                if self.config.verbose {
+                    eprintln!("Running gclient sync for updated version...");
+                }
+
+                let status = Command::new("gclient")
+                    .args(["sync", "--no-history", "-D"])
+                    .current_dir(&self.config.crashpad_checkout)
+                    .env("PATH", self.config.path_with_depot_tools())
+                    .status()?;
+
+                if !status.success() {
+                    return Err("Failed to run gclient sync after version update".into());
+                }
             }
         }
 

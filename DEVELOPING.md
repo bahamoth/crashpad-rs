@@ -141,6 +141,74 @@ The build system automatically:
 
 Build artifacts are cached in `third_party/` (gitignored).
 
+## Native Dependencies Version Management
+
+crashpad-rs pins specific versions of native dependencies to ensure reproducible builds across all environments:
+
+### Current Versions
+
+- **crashpad**: `811b04296520206655bf9bfde5e800181a9282f6`
+- **depot_tools**: `322a071997b51e483fac86d4f61a98934950923e`
+
+These versions are defined in `crashpad-sys/build/config.rs` and are automatically used during the build process.
+
+### Testing with Different Versions
+
+You can override the pinned versions using environment variables:
+
+```bash
+# Test with a different crashpad version
+export CRASHPAD_COMMIT=<commit_hash>
+cargo build --package crashpad-sys
+
+# Test with a different depot_tools version
+export DEPOT_TOOLS_COMMIT=<commit_hash>
+cargo build --package crashpad-sys
+
+# Use both custom versions
+export CRASHPAD_COMMIT=<commit_hash>
+export DEPOT_TOOLS_COMMIT=<commit_hash>
+cargo build --package crashpad-sys
+```
+
+### Finding Available Versions
+
+- **Crashpad commits**: https://chromium.googlesource.com/crashpad/crashpad
+- **depot_tools commits**: https://chromium.googlesource.com/chromium/tools/depot_tools
+
+### Updating Pinned Versions
+
+To permanently update the pinned versions:
+
+1. Test the new versions locally:
+   ```bash
+   export CRASHPAD_COMMIT=<new_commit>
+   export DEPOT_TOOLS_COMMIT=<new_commit>
+   cargo test --lib
+   cargo nextest run --test '*'
+   ```
+
+2. If tests pass, update the constants in `crashpad-sys/build/config.rs`:
+   ```rust
+   pub const CRASHPAD_COMMIT: &str = "<new_commit>";
+   pub const DEPOT_TOOLS_COMMIT: &str = "<new_commit>";
+   ```
+
+3. Clean build to verify:
+   ```bash
+   make clean
+   cargo build --package crashpad-sys
+   ```
+
+### Version Checking
+
+The build system automatically:
+- Checks if the existing checkout matches the pinned version
+- Updates to the correct version if there's a mismatch
+- Re-runs `gclient sync` after version changes
+
+This ensures everyone builds with the same native dependency versions, improving CI reliability and cross-team collaboration.
+
 ## Cross-Compilation
 
 ### iOS (Device)

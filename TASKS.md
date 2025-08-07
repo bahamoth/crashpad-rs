@@ -58,12 +58,12 @@ Copy this template and increment the ID:
 
 | ID | Title | Status | Assignee | Links | Notes |
 |----|-------|--------|----------|-------|-------|
-| T-001 | Clean up build.rs formatting and spacing | TODO | - | - | Refactor mentioned in recent commits |
-| T-002 | Add Windows build support and testing | TODO | - | ARCHITECTURE.md | Windows platform listed but not fully implemented |
-| T-003 | Create comprehensive FFI documentation | TODO | - | wrapper.h | Document all exposed C++ functions |
-| T-004 | Implement Android NDK cross-compilation tests | TODO | - | CROSS_COMPILE.md | Android support added but needs testing |
-| T-005 | Add CI/CD pipeline with GitHub Actions | TODO | - | - | Build and test on all supported platforms |
-| T-006 | Refactor crashpad-sys build system for platform consistency | DOING | architect-thor | build_refactor_plan.md | Unify platform-specific build configurations, fix compiler/linker mismatches |
+| T-001 | Clean up build.rs formatting and spacing | TODO   | - | - | Refactor mentioned in recent commits |
+| T-002 | Add Windows build support and testing | TODO   | - | ARCHITECTURE.md | Windows platform listed but not fully implemented |
+| T-003 | Create comprehensive FFI documentation | TODO   | - | wrapper.h | Document all exposed C++ functions |
+| T-004 | Implement Android NDK cross-compilation tests | TODO   | - | CROSS_COMPILE.md | Android support added but needs testing |
+| T-005 | Add CI/CD pipeline with GitHub Actions | TODO   | - | - | Build and test on all supported platforms |
+| T-006 | Refactor crashpad-sys build system for platform consistency | DONE   | architect-thor | build_refactor_plan.md | Unify platform-specific build configurations, fix compiler/linker mismatches |
 
 ### Task Assignment History
 

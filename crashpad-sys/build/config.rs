@@ -8,6 +8,12 @@ use std::env;
 use std::path::PathBuf;
 use std::process::Command;
 
+/// Native dependencies versions
+/// These are pinned to ensure reproducible builds across environments.
+/// Can be overridden with environment variables CRASHPAD_COMMIT and DEPOT_TOOLS_COMMIT.
+pub const CRASHPAD_COMMIT: &str = "811b04296520206655bf9bfde5e800181a9282f6";
+pub const DEPOT_TOOLS_COMMIT: &str = "322a071997b51e483fac86d4f61a98934950923e";
+
 #[derive(Debug, Clone)]
 pub struct BuildConfig {
     // Basic information
@@ -377,5 +383,15 @@ impl BuildConfig {
             self.depot_tools.display(),
             env::var("PATH").unwrap_or_default()
         )
+    }
+
+    /// Get crashpad commit to use (with env override)
+    pub fn crashpad_commit(&self) -> String {
+        env::var("CRASHPAD_COMMIT").unwrap_or_else(|_| CRASHPAD_COMMIT.to_string())
+    }
+
+    /// Get depot_tools commit to use (with env override)
+    pub fn depot_tools_commit(&self) -> String {
+        env::var("DEPOT_TOOLS_COMMIT").unwrap_or_else(|_| DEPOT_TOOLS_COMMIT.to_string())
     }
 }
