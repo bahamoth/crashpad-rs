@@ -1,0 +1,44 @@
+name: Build Android
+
+on:
+  pull_request:
+  push:
+    branches: [ main ]
+
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 'stable'
+          targets: aarch64-linux-android
+      - uses: Swatinem/rust-cache@v2
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+      - name: Install NDK
+        uses: nttld/setup-ndk@v1
+        id: ndk
+        with:
+          ndk-version: r27c
+      - name: Install cargo-ndk
+        run: cargo install cargo-ndk
+      - name: Create NDK symlinks (workaround for mini_chromium issue)
+        run: |
+          cd ${{ steps.ndk.outputs.ndk-path }}/toolchains/llvm/prebuilt/linux-x86_64/bin
+          # For ARM64 (arm64-v8a)
+          ln -sf aarch64-linux-android21-clang aarch64-linux-android-clang
+          ln -sf aarch64-linux-android21-clang++ aarch64-linux-android-clang++
+          ln -sf llvm-ar aarch64-linux-android-ar
+      - name: Android build (arm64-v8a)
+        env:
+          ANDROID_NDK_HOME: ${{ steps.ndk.outputs.ndk-path }}
+        run: |
+          cargo ndk -t arm64-v8a build --package crashpad-sys
+          cargo ndk -t arm64-v8a build --package crashpad
+

@@ -305,6 +305,11 @@ impl BuildPhases {
             cmd.arg(flag);
         }
 
+        // Add ios-specific defines
+        if self.config.target.contains("ios") {
+            cmd.args(["-DTARGET_OS_IOS=1"]);
+        }
+
         // Add include paths
         cmd.args([
             "-I",
@@ -408,6 +413,11 @@ impl BuildPhases {
             .header(self.config.manifest_dir.join("wrapper.h").to_str().unwrap())
             .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()));
 
+        // Add iOS-specific defines for bindgen
+        if self.config.target.contains("ios") {
+            builder = builder.clang_arg("-DTARGET_OS_IOS=1");
+        }
+
         // For iOS simulator, specify the correct target
         if self.config.target.contains("ios") && self.config.target.contains("sim") {
             let target_flag = if self.config.target.starts_with("aarch64") {
@@ -475,18 +485,7 @@ impl BuildPhases {
         }
 
         // Link Crashpad libraries
-        for lib in [
-            "crashpad_wrapper",
-            "client",
-            "common",
-            "util",
-            "mig_output", // MIG-generated code for macOS
-            "format",
-            "minidump",
-            "snapshot",
-            "context",
-            "base",
-        ] {
+        for lib in &self.config.crashpad_libs {
             println!("cargo:rustc-link-lib=static={lib}");
         }
 
