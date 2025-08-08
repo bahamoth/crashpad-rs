@@ -413,6 +413,11 @@ impl BuildPhases {
             .header(self.config.manifest_dir.join("wrapper.h").to_str().unwrap())
             .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()));
 
+        // Add iOS-specific defines for bindgen
+        if self.config.target.contains("ios") {
+            builder = builder.clang_arg("-DTARGET_OS_IOS=1");
+        }
+
         // For iOS simulator, specify the correct target
         if self.config.target.contains("ios") && self.config.target.contains("sim") {
             let target_flag = if self.config.target.starts_with("aarch64") {
