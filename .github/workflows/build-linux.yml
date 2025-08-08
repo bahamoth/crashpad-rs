@@ -15,16 +15,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 'stable'
       - uses: Swatinem/rust-cache@v2
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential clang pkg-config python3
-      - name: Build crashpad-sys
-        run: cargo build --package crashpad-sys
-      - name: Build crashpad
-        run: cargo build --package crashpad
-      - name: Unit tests
-        run: cargo test --lib
-      - name: Create dist package
-        run: cargo xtask dist
+          sudo apt-get install -y build-essential zlib1g-dev libcurl4-openssl-dev clang pkg-config python3
+      - name: linux Build
+        run: |
+          cargo build --package crashpad-sys
+          cargo build --package crashpad

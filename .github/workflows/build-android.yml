@@ -15,6 +15,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 'stable'
       - uses: Swatinem/rust-cache@v2
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
@@ -22,7 +24,7 @@ jobs:
         uses: nttld/setup-ndk@v1
         id: ndk
         with:
-          ndk-version: r26d
+          ndk-version: r27c
       - name: Install cargo-ndk
         run: cargo install cargo-ndk
       - name: Android build (arm64-v8a)
@@ -30,4 +32,5 @@ jobs:
           ANDROID_NDK_HOME: ${{ steps.ndk.outputs.ndk-path }}
         run: |
           cargo ndk -t arm64-v8a build --package crashpad-sys
+          cargo ndk -t arm64-v8a build --package crashpad
 
