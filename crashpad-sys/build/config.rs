@@ -236,7 +236,7 @@ impl BuildConfig {
 
         // Link settings
         self.link_libs = vec!["c++".to_string(), "z".to_string()];
-        self.crashpad_libs.push("mig_output".to_string()); // iOS needs MIG-generated code
+        self.crashpad_libs.push("mig_output".to_string()); // Crashpad iOS needs MIG-generated code
         self.frameworks = vec![
             "Foundation".to_string(),
             "Security".to_string(),
