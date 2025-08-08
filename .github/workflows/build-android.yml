@@ -17,6 +17,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: 'stable'
+          targets: aarch64-linux-android
       - uses: Swatinem/rust-cache@v2
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
@@ -24,7 +25,7 @@ jobs:
         uses: nttld/setup-ndk@v1
         id: ndk
         with:
-          ndk-version: r26d
+          ndk-version: r27c
       - name: Install cargo-ndk
         run: cargo install cargo-ndk
       - name: Create NDK symlinks (workaround for mini_chromium issue)
