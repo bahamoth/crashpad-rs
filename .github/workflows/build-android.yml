@@ -27,6 +27,13 @@ jobs:
           ndk-version: r26d
       - name: Install cargo-ndk
         run: cargo install cargo-ndk
+      - name: Create NDK symlinks (workaround for mini_chromium issue)
+        run: |
+          cd ${{ steps.ndk.outputs.ndk-path }}/toolchains/llvm/prebuilt/linux-x86_64/bin
+          # For ARM64 (arm64-v8a)
+          ln -sf aarch64-linux-android21-clang aarch64-linux-android-clang
+          ln -sf aarch64-linux-android21-clang++ aarch64-linux-android-clang++
+          ln -sf llvm-ar aarch64-linux-android-ar
       - name: Android build (arm64-v8a)
         env:
           ANDROID_NDK_HOME: ${{ steps.ndk.outputs.ndk-path }}
