@@ -3,7 +3,7 @@ name: Build iOS
 on:
   pull_request:
   push:
-    branches: [ "**" ]
+    branches: [ main ]
 
 concurrency:
   group: ios-${{ github.ref }}

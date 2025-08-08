@@ -3,7 +3,7 @@ name: Build macOS
 on:
   pull_request:
   push:
-    branches: [ "**" ]
+    branches: [ main ]
 
 concurrency:
   group: macos-${{ github.ref }}
