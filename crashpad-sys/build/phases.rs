@@ -305,6 +305,11 @@ impl BuildPhases {
             cmd.arg(flag);
         }
 
+        // Add ios-specific defines
+        if self.config.target.contains("ios") {
+            cmd.args(["-DTARGET_OS_IOS=1"]);
+        }
+
         // Add include paths
         cmd.args([
             "-I",
