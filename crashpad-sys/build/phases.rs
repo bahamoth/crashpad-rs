@@ -475,18 +475,7 @@ impl BuildPhases {
         }
 
         // Link Crashpad libraries
-        for lib in [
-            "crashpad_wrapper",
-            "client",
-            "common",
-            "util",
-            "mig_output", // MIG-generated code for macOS
-            "format",
-            "minidump",
-            "snapshot",
-            "context",
-            "base",
-        ] {
+        for lib in &self.config.crashpad_libs {
             println!("cargo:rustc-link-lib=static={lib}");
         }
 

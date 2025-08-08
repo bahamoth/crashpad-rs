@@ -1,0 +1,28 @@
+name: Build iOS
+
+on:
+  pull_request:
+  push:
+    branches: [ "**" ]
+
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ios:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Add iOS targets
+        run: |
+          rustup target add aarch64-apple-ios aarch64-apple-ios-sim
+      - name: Build crashpad-sys (device)
+        run: |
+          cargo build -p crashpad-sys --target aarch64-apple-ios
+      - name: Build iOS simulator example
+        run: |
+          cargo build --target aarch64-apple-ios-sim --example ios_simulator_test
+

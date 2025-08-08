@@ -1,0 +1,26 @@
+name: Build macOS
+
+on:
+  pull_request:
+  push:
+    branches: [ "**" ]
+
+concurrency:
+  group: macos-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  macos:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Build crashpad-sys
+        run: cargo build --package crashpad-sys
+      - name: Build crashpad
+        run: cargo build --package crashpad
+      - name: Unit tests
+        run: cargo test --lib
+      - name: Create dist package
+        run: cargo xtask dist

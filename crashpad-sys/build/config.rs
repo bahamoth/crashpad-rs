@@ -33,7 +33,8 @@ pub struct BuildConfig {
     pub cxx_flags: Vec<String>,
     pub gn_args: HashMap<String, String>,
     pub link_libs: Vec<String>,
-    pub frameworks: Vec<String>, // iOS/macOS only
+    pub crashpad_libs: Vec<String>, // Crashpad static libraries to link
+    pub frameworks: Vec<String>,    // iOS/macOS only
 
     // Build options
     pub verbose: bool,
@@ -69,6 +70,17 @@ impl BuildConfig {
             cxx_flags: vec!["-std=c++17".to_string()],
             gn_args: HashMap::new(),
             link_libs: vec!["stdc++".to_string(), "pthread".to_string()],
+            crashpad_libs: vec![
+                "crashpad_wrapper".to_string(),
+                "client".to_string(),
+                "common".to_string(),
+                "util".to_string(),
+                "format".to_string(),
+                "minidump".to_string(),
+                "snapshot".to_string(),
+                "context".to_string(),
+                "base".to_string(),
+            ],
             frameworks: Vec::new(),
             verbose: env::var("CRASHPAD_VERBOSE").is_ok(),
         };
@@ -220,6 +232,7 @@ impl BuildConfig {
 
         // Link settings
         self.link_libs = vec!["c++".to_string(), "z".to_string()];
+        self.crashpad_libs.push("mig_output".to_string()); // iOS needs MIG-generated code
         self.frameworks = vec![
             "Foundation".to_string(),
             "Security".to_string(),
@@ -245,6 +258,7 @@ impl BuildConfig {
         self.archiver = "libtool".to_string();
 
         self.link_libs = vec!["c++".to_string()];
+        self.crashpad_libs.push("mig_output".to_string()); // macOS needs MIG-generated code
         self.frameworks = vec![
             "Foundation".to_string(),
             "Security".to_string(),

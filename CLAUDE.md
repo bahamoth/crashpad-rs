@@ -4,6 +4,10 @@ Claude Code guidance for crashpad-rs - Rust bindings for Google Crashpad.
 
 ## 🎯 Task Execution Workflow
 
+### 0. Prepare Development
+- **CHECK**: Read [DEVELOPING.md](./DEVELOPING.md) for development
+- **CHECK**: Know how to contribute the project 
+
 ### 1. Starting a Task
 - **CHECK**: Read [TASKS.md](./TASKS.md) for available work
 - **ACTION**: Claim task with your agent identifier (e.g., dev-vision)
@@ -12,6 +16,7 @@ Claude Code guidance for crashpad-rs - Rust bindings for Google Crashpad.
   mkdir -p .agent-checklists
   touch .agent-checklists/{your-role}-{your-name}-{task-id}.md
   ```
+- **CREATE**: create a branch {feature/fix/refactor/chore}/T-00X-{task description}
 - **USE**: TodoWrite for session-based tracking
 
 ### 2. Before Implementation
