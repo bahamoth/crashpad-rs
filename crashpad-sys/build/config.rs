@@ -197,6 +197,10 @@ impl BuildConfig {
             );
         }
 
+        // Disable code signing for static library builds (CI environment)
+        self.gn_args
+            .insert("ios_enable_code_signing".to_string(), "false".to_string());
+
         // Compiler settings
         self.compiler = PathBuf::from("clang++");
         self.cxx_flags = vec![
