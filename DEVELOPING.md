@@ -38,24 +38,38 @@ This guide covers the development workflow for crashpad-rs, including environmen
 > 
 > **This is a temporary ad-hoc solution!** The issue is in Crashpad's mini_chromium build configuration
 > ([mini_chromium/build/config/BUILD.gn#L481-L497](https://github.com/chromium/mini_chromium/blob/main/build/config/BUILD.gn#L481-L497)).   
-> It constructs NDK tool paths incorrectly by concatenating `tool_prefix + android_api_level + "-clang"` (e.g. `aarch64-linux-android21-clang`),  
-> but then looks for `tool_prefix + "-clang"` without the API level. 
+> It looks for archiver tools with incorrect names (e.g. `aarch64-linux-android-ar`).  
 > Until this is fixed upstream, you MUST create these symlinks manually:  
 > 
+> **For NDK r27+ (recommended):**
+> ```bash
+> # ⚠️ REQUIRED: Create symlinks for NDK archiver (temporary workaround)
+> cd $ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin
+> 
+> # Only ar needs symlinks in r27+
+> ln -sf llvm-ar aarch64-linux-android-ar
+> ln -sf llvm-ar arm-linux-androideabi-ar
+> ln -sf llvm-ar x86_64-linux-android-ar
+> ln -sf llvm-ar i686-linux-android-ar
+> ```
+> 
+> **For NDK r26 and earlier:**
 > ```bash
 > # ⚠️ REQUIRED: Create symlinks for NDK tools (temporary workaround)
 > cd $ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin
 > 
 > # For ARM64
-> ln -sf aarch64-linux-android23-clang aarch64-linux-android-clang
-> ln -sf aarch64-linux-android23-clang++ aarch64-linux-android-clang++
+> ln -sf aarch64-linux-android21-clang aarch64-linux-android-clang
+> ln -sf aarch64-linux-android21-clang++ aarch64-linux-android-clang++
+> ln -sf llvm-ar aarch64-linux-android-ar
 > 
 > # For x86_64
-> ln -sf x86_64-linux-android23-clang x86_64-linux-android-clang
-> ln -sf x86_64-linux-android23-clang++ x86_64-linux-android-clang++
+> ln -sf x86_64-linux-android21-clang x86_64-linux-android-clang
+> ln -sf x86_64-linux-android21-clang++ x86_64-linux-android-clang++
+> ln -sf llvm-ar x86_64-linux-android-ar
 > ```
 > 
-> **Without these symlinks, Android builds WILL FAIL with "compiler not found" errors!**
+> **Without these symlinks, Android builds WILL FAIL with "ar not found" or "compiler not found" errors!**
 - Set environment variables:
   ```bash
   export ANDROID_NDK_HOME=/path/to/android-ndk
