@@ -1,0 +1,15 @@
+[package]
+name = "crashpad-build"
+version = "0.1.0"
+edition = "2021"
+description = "Shared build logic for crashpad-rs"
+
+[dependencies]
+bindgen = "0.69"
+cc = "1.0"
+chrono = "0.4"
+serde_json = "1.0"
+
+[lib]
+name = "crashpad_build"
+path = "src/lib.rs"

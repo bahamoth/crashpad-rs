@@ -18,6 +18,15 @@ enum Commands {
         #[arg(long)]
         release: bool,
     },
+    /// Build pre-built package (phases 1-3)
+    Prebuild {
+        /// Target triple
+        #[arg(long)]
+        target: Option<String>,
+        /// Output directory
+        #[arg(long, default_value = "prebuild")]
+        output: PathBuf,
+    },
     /// Create a distribution package
     Dist {
         /// Target directory for distribution
@@ -38,10 +47,127 @@ fn main() -> Result<()> {
 
     match cli.command {
         Commands::Build { release } => build(&sh, release)?,
+        Commands::Prebuild { target, output } => prebuild(&sh, target, &output)?,
         Commands::Dist { output } => dist(&sh, &output)?,
         Commands::Test => test(&sh)?,
         Commands::Clean => clean(&sh)?,
         Commands::InstallTools => install_tools(&sh)?,
+    }
+
+    Ok(())
+}
+
+fn prebuild(sh: &Shell, target: Option<String>, output_dir: &Path) -> Result<()> {
+    println!("Building pre-built package (phases 1-3)...");
+
+    // Determine target
+    let target = if let Some(t) = target {
+        t
+    } else {
+        // Get default target from rustc
+        let output = cmd!(sh, "rustc --version --verbose")
+            .read()
+            .context("Failed to get rustc target")?;
+
+        output
+            .lines()
+            .find(|line| line.starts_with("host:"))
+            .and_then(|line| line.split_whitespace().nth(1))
+            .map(String::from)
+            .unwrap_or_else(|| {
+                let (os, arch) = detect_platform();
+                format!("{arch}-unknown-{os}-gnu")
+            })
+    };
+
+    println!("Target: {target}");
+    println!("Output: {}", output_dir.display());
+
+    // Set up environment for build
+    let workspace_root = find_workspace_root(sh)?;
+    let profile = "debug";
+
+    // Set environment variables for BuildConfig
+    // BuildConfig will now use fixed path: target/{target}/{profile}/crashpad_build
+    std::env::set_var("TARGET", &target);
+    std::env::set_var("PROFILE", profile);
+    std::env::set_var("OUT_DIR", workspace_root.join("target").join("dummy")); // Not used but required
+    std::env::set_var("CARGO_MANIFEST_DIR", workspace_root.join("crashpad-sys"));
+
+    // Use crashpad-build to run phases 1-3
+    use crashpad_build::{BuildConfig, BuildPhases};
+
+    let config = BuildConfig::from_env()
+        .map_err(|e| anyhow::anyhow!("Failed to create build config: {}", e))?;
+    let phases = BuildPhases::new(config.clone());
+
+    // Run phases 1-3 only
+    println!("Phase 1: Preparing dependencies...");
+    phases
+        .prepare()
+        .map_err(|e| anyhow::anyhow!("Phase 1 failed: {}", e))?;
+
+    println!("Phase 2: Configuring build...");
+    phases
+        .configure()
+        .map_err(|e| anyhow::anyhow!("Phase 2 failed: {}", e))?;
+
+    println!("Phase 3: Building with Ninja...");
+    phases
+        .build()
+        .map_err(|e| anyhow::anyhow!("Phase 3 failed: {}", e))?;
+
+    // The build is now in the standard location
+    let build_dir = config.build_dir();
+    println!("\n✅ Pre-built package created successfully!");
+    println!("   Build location: {}", build_dir.display());
+
+    // Optionally copy to output directory if specified
+    if output_dir != Path::new("prebuild") {
+        println!("\nCopying to output directory: {}", output_dir.display());
+
+        sh.create_dir(output_dir)?;
+
+        // Copy headers (needed for wrapper compilation)
+        let include_dir = output_dir.join("include");
+        sh.create_dir(&include_dir)?;
+
+        let crashpad_dir = config.crashpad_dir.clone();
+        for dir in ["client", "util", "handler", "minidump", "snapshot"] {
+            let src = crashpad_dir.join(dir);
+            if src.exists() {
+                let dest = include_dir.join(dir);
+                sh.create_dir(&dest)?;
+                cmd!(sh, "cp -r {src}/*.h {dest}/").run().ok();
+            }
+        }
+
+        // Copy mini_chromium headers
+        let mini_chromium = crashpad_dir.join("third_party/mini_chromium/mini_chromium");
+        if mini_chromium.exists() {
+            let dest = include_dir.join("third_party/mini_chromium/mini_chromium");
+            sh.create_dir(&dest)?;
+            cmd!(sh, "cp -r {mini_chromium} {dest}/..").run()?;
+        }
+
+        // Copy built libraries
+        let lib_dir = output_dir.join("lib");
+        sh.create_dir(&lib_dir)?;
+
+        if build_dir.join("obj").exists() {
+            cmd!(sh, "cp -r {build_dir}/obj {lib_dir}/").run()?;
+        }
+
+        // Copy handler binary
+        let bin_dir = output_dir.join("bin");
+        sh.create_dir(&bin_dir)?;
+
+        let handler = build_dir.join("crashpad_handler");
+        if handler.exists() {
+            sh.copy_file(&handler, bin_dir.join("crashpad_handler"))?;
+        }
+
+        println!("✓ Copied to: {}", output_dir.display());
     }
 
     Ok(())

@@ -133,8 +133,19 @@ impl BuildConfig {
         };
 
         // Compiler path (dynamic, not hardcoded)
+        // Detect host platform for NDK prebuilt directory
+        let ndk_host = if cfg!(target_os = "macos") {
+            "darwin-x86_64"
+        } else if cfg!(target_os = "linux") {
+            "linux-x86_64"
+        } else if cfg!(target_os = "windows") {
+            "windows-x86_64"
+        } else {
+            return Err("Unsupported host platform for Android NDK".into());
+        };
+
         self.compiler = ndk
-            .join("toolchains/llvm/prebuilt/linux-x86_64/bin")
+            .join(format!("toolchains/llvm/prebuilt/{ndk_host}/bin"))
             .join(format!("{triple}{api}-clang++"));
 
         // GN args
@@ -370,8 +381,29 @@ impl BuildConfig {
     }
 
     /// Get build directory for current platform
+    /// Uses a fixed path without hash for consistency between vendored and prebuild
     pub fn build_dir(&self) -> PathBuf {
-        self.out_dir.join("crashpad_build")
+        // Use fixed path: target/{target}/{profile}/crashpad_build
+        self.manifest_dir
+            .parent()
+            .expect("Failed to get parent directory")
+            .join("target")
+            .join(&self.target)
+            .join(&self.profile)
+            .join("crashpad_build")
+    }
+
+    /// Get prebuilt bundle directory for distribution
+    /// Contains only the essential files needed for linking
+    pub fn prebuilt_bundle_dir(&self) -> PathBuf {
+        // Use fixed path: target/{target}/{profile}/prebuilt_bundle
+        self.manifest_dir
+            .parent()
+            .expect("Failed to get parent directory")
+            .join("target")
+            .join(&self.target)
+            .join(&self.profile)
+            .join("prebuilt_bundle")
     }
 
     /// Get wrapper object file path

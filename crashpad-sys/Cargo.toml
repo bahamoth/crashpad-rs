@@ -12,6 +12,7 @@ links = "crashpad"
 [dependencies]
 
 [build-dependencies]
+crashpad-build = { path = "../crashpad-build" }
 bindgen = "0.69"
 cc = "1.0"
 shellexpand = "3.1"

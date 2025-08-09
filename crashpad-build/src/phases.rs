@@ -2,8 +2,10 @@
 ///
 /// This module implements the actual build steps for Crashpad.
 /// Each phase is a clearly defined step in the build process.
+use std::collections::HashMap;
 use std::env;
 use std::fs;
+use std::path::Path;
 use std::process::Command;
 
 use super::config::BuildConfig;
@@ -286,6 +288,9 @@ impl BuildPhases {
         // Copy crashpad_handler to target directory for easy access
         self.copy_handler_to_target()?;
 
+        // Create prebuilt bundle with only essential files
+        self.create_prebuilt_bundle()?;
+
         Ok(())
     }
 
@@ -442,21 +447,44 @@ impl BuildPhases {
     /// Phase 7: Emit cargo link metadata
     pub fn emit_link(&self) -> Result<(), Box<dyn std::error::Error>> {
         let build_dir = self.config.build_dir();
+
+        // Check if using prebuilt bundle (lib/ exists) or full build (obj/ exists)
+        let lib_dir = build_dir.join("lib");
         let obj_dir = build_dir.join("obj");
+        let is_prebuilt = lib_dir.exists() && lib_dir.is_dir();
 
-        // Library search paths
-        let search_paths = [
-            obj_dir.join("client"),
-            obj_dir.join("util"),
-            obj_dir.join("third_party/mini_chromium/mini_chromium/base"),
-            obj_dir.join("minidump"),
-            obj_dir.join("snapshot"),
-            obj_dir.join("handler"),
-            self.config.out_dir.clone(),
-        ];
+        if is_prebuilt {
+            // Prebuilt bundle: search in lib/ directory
+            println!("cargo:rustc-link-search=native={}", lib_dir.display());
 
-        for path in &search_paths {
-            println!("cargo:rustc-link-search=native={}", path.display());
+            // Also add OUT_DIR for wrapper object
+            println!(
+                "cargo:rustc-link-search=native={}",
+                self.config.out_dir.display()
+            );
+
+            if self.config.verbose {
+                eprintln!("Using prebuilt bundle from: {}", lib_dir.display());
+            }
+        } else {
+            // Full build: search in obj/ subdirectories
+            let search_paths = [
+                obj_dir.join("client"),
+                obj_dir.join("util"),
+                obj_dir.join("third_party/mini_chromium/mini_chromium/base"),
+                obj_dir.join("minidump"),
+                obj_dir.join("snapshot"),
+                obj_dir.join("handler"),
+                self.config.out_dir.clone(),
+            ];
+
+            for path in &search_paths {
+                println!("cargo:rustc-link-search=native={}", path.display());
+            }
+
+            if self.config.verbose {
+                eprintln!("Using full build from: {}", obj_dir.display());
+            }
         }
 
         // Add Android NDK library path for C++ static libs
@@ -599,5 +627,253 @@ impl BuildPhases {
         );
 
         Ok(())
+    }
+
+    /// Create prebuilt bundle with only essential files for distribution
+    /// This extracts the minimal set of files needed for linking from the full build
+    pub fn create_prebuilt_bundle(&self) -> Result<(), Box<dyn std::error::Error>> {
+        if self.config.verbose {
+            eprintln!("Creating prebuilt bundle...");
+        }
+
+        let build_dir = self.config.build_dir();
+        let bundle_dir = self.config.prebuilt_bundle_dir();
+
+        // Clean and create bundle directory structure
+        if bundle_dir.exists() {
+            fs::remove_dir_all(&bundle_dir)?;
+        }
+
+        let lib_dir = bundle_dir.join("lib");
+        let include_dir = bundle_dir.join("include");
+        let bin_dir = bundle_dir.join("bin");
+
+        fs::create_dir_all(&lib_dir)?;
+        fs::create_dir_all(&include_dir)?;
+        fs::create_dir_all(&bin_dir)?;
+
+        // Copy essential libraries only (exclude test libraries)
+        let obj_dir = build_dir.join("obj");
+
+        // Define which libraries to include
+        let essential_libs = vec![
+            ("client", "libclient.a"),
+            ("client", "libcommon.a"),
+            ("util", "libutil.a"),
+            ("minidump", "libformat.a"),
+            ("minidump", "libminidump.a"),
+            ("snapshot", "libsnapshot.a"),
+            ("snapshot", "libcontext.a"),
+            ("handler", "libcommon.a"),
+            ("third_party/mini_chromium/mini_chromium/base", "libbase.a"),
+        ];
+
+        // Platform-specific libraries
+        if self.config.target.contains("darwin") || self.config.target.contains("ios") {
+            // macOS/iOS need MIG output - check both possible locations
+            let mig_lib_paths = vec![
+                obj_dir.join("util/libmig_output.a"),
+                obj_dir.join("util/mach/libmig_output.a"),
+            ];
+
+            let mut found = false;
+            for mig_lib in &mig_lib_paths {
+                if mig_lib.exists() {
+                    let dest = lib_dir.join("libmig_output.a");
+                    fs::copy(mig_lib, &dest)?;
+                    if self.config.verbose {
+                        eprintln!("  Copied: libmig_output.a");
+                    }
+                    found = true;
+                    break;
+                }
+            }
+
+            if !found && self.config.verbose {
+                eprintln!("  Warning: libmig_output.a not found (required for macOS/iOS)");
+            }
+        }
+
+        if self.config.target.contains("ios") {
+            // iOS needs additional network library
+            let net_lib = obj_dir.join("util/libnet.a");
+            if net_lib.exists() {
+                let dest = lib_dir.join("libnet.a");
+                fs::copy(&net_lib, &dest)?;
+                if self.config.verbose {
+                    eprintln!("  Copied: libnet.a");
+                }
+            }
+        }
+
+        // Copy essential libraries
+        for (subdir, lib_name) in &essential_libs {
+            let src = obj_dir.join(subdir).join(lib_name);
+            if src.exists() {
+                let dest = lib_dir.join(lib_name);
+                fs::copy(&src, &dest)?;
+                if self.config.verbose {
+                    eprintln!("  Copied: {lib_name}");
+                }
+            } else if self.config.verbose {
+                eprintln!("  Warning: {lib_name} not found");
+            }
+        }
+
+        // Copy header files needed for wrapper compilation
+        let crashpad_dir = self.config.crashpad_dir.clone();
+        let header_dirs = vec!["client", "util", "handler", "minidump", "snapshot"];
+
+        for dir in &header_dirs {
+            let src_dir = crashpad_dir.join(dir);
+            let dest_dir = include_dir.join(dir);
+
+            if src_dir.exists() {
+                fs::create_dir_all(&dest_dir)?;
+                self.copy_headers(&src_dir, &dest_dir)?;
+                if self.config.verbose {
+                    eprintln!("  Copied headers: {dir}/");
+                }
+            }
+        }
+
+        // Copy mini_chromium headers
+        let mini_chromium_src = crashpad_dir.join("third_party/mini_chromium/mini_chromium");
+        if mini_chromium_src.exists() {
+            let mini_chromium_dest = include_dir.join("third_party/mini_chromium/mini_chromium");
+            fs::create_dir_all(&mini_chromium_dest)?;
+            self.copy_directory(&mini_chromium_src, &mini_chromium_dest)?;
+            if self.config.verbose {
+                eprintln!("  Copied headers: third_party/mini_chromium/");
+            }
+        }
+
+        // Copy handler binary (except for iOS which uses in-process handler)
+        if !self.config.target.contains("ios") {
+            let handler_name = if self.config.target.contains("android") {
+                "libcrashpad_handler.so"
+            } else if self.config.target.contains("windows") {
+                "crashpad_handler.exe"
+            } else {
+                "crashpad_handler"
+            };
+
+            let handler_src = build_dir.join("crashpad_handler");
+            if handler_src.exists() {
+                let handler_dest = bin_dir.join(handler_name);
+                fs::copy(&handler_src, &handler_dest)?;
+
+                // Make executable on Unix
+                #[cfg(unix)]
+                {
+                    use std::os::unix::fs::PermissionsExt;
+                    let mut perms = fs::metadata(&handler_dest)?.permissions();
+                    perms.set_mode(0o755);
+                    fs::set_permissions(&handler_dest, perms)?;
+                }
+
+                if self.config.verbose {
+                    eprintln!("  Copied handler: {handler_name}");
+                }
+            }
+        }
+
+        // Create metadata.json
+        let metadata = HashMap::from([
+            ("crashpad_commit", self.config.crashpad_commit()),
+            ("depot_tools_commit", self.config.depot_tools_commit()),
+            ("target", self.config.target.clone()),
+            ("profile", self.config.profile.clone()),
+            ("build_date", chrono::Utc::now().to_rfc3339()),
+            ("bundle_version", "1.0".to_string()),
+        ]);
+
+        let metadata_path = bundle_dir.join("metadata.json");
+        let metadata_json = serde_json::to_string_pretty(&metadata)?;
+        fs::write(&metadata_path, metadata_json)?;
+
+        if self.config.verbose {
+            eprintln!("Prebuilt bundle created at: {}", bundle_dir.display());
+
+            // Calculate and report bundle size
+            let bundle_size = self.calculate_dir_size(&bundle_dir)?;
+            let build_size = self.calculate_dir_size(&build_dir)?;
+            eprintln!(
+                "Bundle size: {:.1} MB (vs full build: {:.1} MB - {:.1}% reduction)",
+                bundle_size as f64 / 1_048_576.0,
+                build_size as f64 / 1_048_576.0,
+                ((build_size - bundle_size) as f64 / build_size as f64) * 100.0
+            );
+        }
+
+        Ok(())
+    }
+
+    /// Helper: Copy header files recursively
+    fn copy_headers(&self, src: &Path, dest: &Path) -> Result<(), Box<dyn std::error::Error>> {
+        Self::copy_headers_impl(src, dest)
+    }
+
+    fn copy_headers_impl(src: &Path, dest: &Path) -> Result<(), Box<dyn std::error::Error>> {
+        for entry in fs::read_dir(src)? {
+            let entry = entry?;
+            let path = entry.path();
+            let file_name = entry.file_name();
+            let dest_path = dest.join(&file_name);
+
+            if path.is_dir() {
+                fs::create_dir_all(&dest_path)?;
+                Self::copy_headers_impl(&path, &dest_path)?;
+            } else if path.extension().and_then(|s| s.to_str()) == Some("h") {
+                fs::copy(&path, &dest_path)?;
+            }
+        }
+        Ok(())
+    }
+
+    /// Helper: Copy directory recursively
+    fn copy_directory(&self, src: &Path, dest: &Path) -> Result<(), Box<dyn std::error::Error>> {
+        Self::copy_directory_impl(src, dest)
+    }
+
+    fn copy_directory_impl(src: &Path, dest: &Path) -> Result<(), Box<dyn std::error::Error>> {
+        for entry in fs::read_dir(src)? {
+            let entry = entry?;
+            let path = entry.path();
+            let file_name = entry.file_name();
+            let dest_path = dest.join(&file_name);
+
+            if path.is_dir() {
+                fs::create_dir_all(&dest_path)?;
+                Self::copy_directory_impl(&path, &dest_path)?;
+            } else {
+                fs::copy(&path, &dest_path)?;
+            }
+        }
+        Ok(())
+    }
+
+    /// Helper: Calculate directory size recursively
+    fn calculate_dir_size(&self, dir: &Path) -> Result<u64, Box<dyn std::error::Error>> {
+        Self::calculate_dir_size_impl(dir)
+    }
+
+    fn calculate_dir_size_impl(dir: &Path) -> Result<u64, Box<dyn std::error::Error>> {
+        let mut size = 0;
+
+        if dir.is_dir() {
+            for entry in fs::read_dir(dir)? {
+                let entry = entry?;
+                let path = entry.path();
+
+                if path.is_dir() {
+                    size += Self::calculate_dir_size_impl(&path)?;
+                } else {
+                    size += entry.metadata()?.len();
+                }
+            }
+        }
+
+        Ok(size)
     }
 }

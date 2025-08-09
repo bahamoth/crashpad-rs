@@ -1,5 +1,5 @@
 [workspace]
-members = ["crashpad-sys", "crashpad", "xtask"]
+members = ["crashpad-sys", "crashpad", "crashpad-build", "xtask"]
 resolver = "2"
 
 [workspace.package]
