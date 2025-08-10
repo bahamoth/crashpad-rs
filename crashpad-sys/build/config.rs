@@ -8,12 +8,6 @@ use std::env;
 use std::path::PathBuf;
 use std::process::Command;
 
-/// Native dependencies versions
-/// These are pinned to ensure reproducible builds across environments.
-/// Can be overridden with environment variables CRASHPAD_COMMIT and DEPOT_TOOLS_COMMIT.
-pub const CRASHPAD_COMMIT: &str = "811b04296520206655bf9bfde5e800181a9282f6";
-pub const DEPOT_TOOLS_COMMIT: &str = "322a071997b51e483fac86d4f61a98934950923e";
-
 #[derive(Debug, Clone)]
 pub struct BuildConfig {
     // Basic information
@@ -23,8 +17,6 @@ pub struct BuildConfig {
     pub manifest_dir: PathBuf,
 
     // Paths
-    pub depot_tools: PathBuf,
-    pub crashpad_checkout: PathBuf,
     pub crashpad_dir: PathBuf,
 
     // Platform-specific unified settings
@@ -53,17 +45,14 @@ impl BuildConfig {
             .parent()
             .ok_or("Failed to get parent directory")?
             .join("third_party");
-        let depot_tools = third_party.join("depot_tools");
-        let crashpad_checkout = third_party.join("crashpad_checkout");
-        let crashpad_dir = crashpad_checkout.join("crashpad");
+
+        let crashpad_dir = third_party.join("crashpad");
 
         let mut config = Self {
             target: target.clone(),
             profile: profile.clone(),
             out_dir,
             manifest_dir,
-            depot_tools,
-            crashpad_checkout,
             crashpad_dir,
             compiler: PathBuf::from("c++"),
             archiver: "ar".to_string(),
@@ -95,6 +84,14 @@ impl BuildConfig {
             }
             .to_string(),
         );
+
+        // Disable tests since we don't need them and they require additional dependencies
+        config
+            .gn_args
+            .insert("crashpad_build_tests".to_string(), "false".to_string());
+        config
+            .gn_args
+            .insert("crashpad_build_test_data".to_string(), "false".to_string());
 
         // Platform-specific configuration
         if target.contains("android") {
@@ -133,8 +130,19 @@ impl BuildConfig {
         };
 
         // Compiler path (dynamic, not hardcoded)
+        // Detect host platform for NDK prebuilt directory
+        let ndk_host = if cfg!(target_os = "macos") {
+            "darwin-x86_64"
+        } else if cfg!(target_os = "linux") {
+            "linux-x86_64"
+        } else if cfg!(target_os = "windows") {
+            "windows-x86_64"
+        } else {
+            return Err("Unsupported host platform for Android NDK".into());
+        };
+
         self.compiler = ndk
-            .join("toolchains/llvm/prebuilt/linux-x86_64/bin")
+            .join(format!("toolchains/llvm/prebuilt/{ndk_host}/bin"))
             .join(format!("{triple}{api}-clang++"));
 
         // GN args
@@ -370,46 +378,20 @@ impl BuildConfig {
     }
 
     /// Get build directory for current platform
+    /// Uses a fixed path without hash for consistency between vendored and prebuild
     pub fn build_dir(&self) -> PathBuf {
-        self.out_dir.join("crashpad_build")
-    }
-
-    /// Get wrapper object file path
-    pub fn wrapper_obj_path(&self) -> PathBuf {
-        self.out_dir.join("crashpad_wrapper.o")
-    }
-
-    /// Get static library path
-    pub fn static_lib_path(&self) -> PathBuf {
-        self.out_dir.join("libcrashpad_wrapper.a")
+        // Use fixed path: target/{target}/{profile}/crashpad_build
+        self.manifest_dir
+            .parent()
+            .expect("Failed to get parent directory")
+            .join("target")
+            .join(&self.target)
+            .join(&self.profile)
+            .join("crashpad_build")
     }
 
     /// Get bindings output path
     pub fn bindings_path(&self) -> PathBuf {
         self.out_dir.join("bindings.rs")
-    }
-
-    /// Get handler binary path
-    pub fn handler_path(&self) -> PathBuf {
-        self.build_dir().join("crashpad_handler")
-    }
-
-    /// Get PATH with depot_tools
-    pub fn path_with_depot_tools(&self) -> String {
-        format!(
-            "{}:{}",
-            self.depot_tools.display(),
-            env::var("PATH").unwrap_or_default()
-        )
-    }
-
-    /// Get crashpad commit to use (with env override)
-    pub fn crashpad_commit(&self) -> String {
-        env::var("CRASHPAD_COMMIT").unwrap_or_else(|_| CRASHPAD_COMMIT.to_string())
-    }
-
-    /// Get depot_tools commit to use (with env override)
-    pub fn depot_tools_commit(&self) -> String {
-        env::var("DEPOT_TOOLS_COMMIT").unwrap_or_else(|_| DEPOT_TOOLS_COMMIT.to_string())
     }
 }

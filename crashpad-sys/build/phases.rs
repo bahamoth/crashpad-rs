@@ -1,211 +1,59 @@
-/// Build phases management
-///
-/// This module implements the actual build steps for Crashpad.
-/// Each phase is a clearly defined step in the build process.
 use std::env;
 use std::fs;
+use std::path::PathBuf;
 use std::process::Command;
 
-use super::config::BuildConfig;
+use crate::config::BuildConfig;
+use crate::tools::BinaryToolManager;
 
 pub struct BuildPhases {
     config: BuildConfig,
+    gn_path: Option<PathBuf>,
+    ninja_path: Option<PathBuf>,
 }
 
 impl BuildPhases {
     /// Create a new BuildPhases instance with the given configuration
     pub fn new(config: BuildConfig) -> Self {
-        Self { config }
+        Self {
+            config,
+            gn_path: None,
+            ninja_path: None,
+        }
     }
 
-    /// Phase 1: Prepare dependencies (depot_tools, crashpad source)
-    pub fn prepare(&self) -> Result<(), Box<dyn std::error::Error>> {
-        // Ensure depot_tools is available with correct version
-        if !self.config.depot_tools.exists() {
-            if self.config.verbose {
-                eprintln!("Cloning depot_tools...");
-            }
-
-            let status = Command::new("git")
-                .args([
-                    "clone",
-                    "https://chromium.googlesource.com/chromium/tools/depot_tools.git",
-                ])
-                .arg(&self.config.depot_tools)
-                .status()?;
-
-            if !status.success() {
-                return Err("Failed to clone depot_tools".into());
-            }
-
-            // Checkout specific version
-            let depot_tools_commit = self.config.depot_tools_commit();
-            if self.config.verbose {
-                eprintln!("Checking out depot_tools commit: {depot_tools_commit}");
-            }
-
-            let status = Command::new("git")
-                .args(["checkout", &depot_tools_commit])
-                .current_dir(&self.config.depot_tools)
-                .status()?;
-
-            if !status.success() {
-                return Err(
-                    format!("Failed to checkout depot_tools commit {depot_tools_commit}").into(),
-                );
-            }
-        } else {
-            // Check if we have the right version
-            let depot_tools_commit = self.config.depot_tools_commit();
-            let output = Command::new("git")
-                .args(["rev-parse", "HEAD"])
-                .current_dir(&self.config.depot_tools)
-                .output()?;
-
-            let current = String::from_utf8_lossy(&output.stdout).trim().to_string();
-            if current != depot_tools_commit {
-                if self.config.verbose {
-                    eprintln!(
-                        "depot_tools version mismatch. Current: {current}, Expected: {depot_tools_commit}"
-                    );
-                    eprintln!("Updating depot_tools to correct version...");
-                }
-
-                // Fetch and checkout
-                Command::new("git")
-                    .args(["fetch", "origin"])
-                    .current_dir(&self.config.depot_tools)
-                    .status()?;
-
-                let status = Command::new("git")
-                    .args(["checkout", &depot_tools_commit])
-                    .current_dir(&self.config.depot_tools)
-                    .status()?;
-
-                if !status.success() {
-                    return Err(format!(
-                        "Failed to update depot_tools to commit {depot_tools_commit}"
-                    )
-                    .into());
-                }
-            }
+    /// Phase 1: Prepare dependencies (ensure build tools are available)
+    pub fn prepare(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        // Ensure crashpad submodule is initialized
+        if !self.config.crashpad_dir.exists() || !self.config.crashpad_dir.join(".git").exists() {
+            return Err(
+                "Crashpad submodule not initialized. Run: git submodule update --init --recursive"
+                    .into(),
+            );
         }
 
-        // Ensure crashpad is available with correct version
-        if !self.config.crashpad_dir.exists() {
-            if self.config.verbose {
-                eprintln!("Setting up Crashpad...");
-            }
-
-            fs::create_dir_all(&self.config.crashpad_checkout)?;
-
-            // Write .gclient configuration
-            let gclient_content = r#"solutions = [
-  {
-    "name": "crashpad",
-    "url": "https://chromium.googlesource.com/crashpad/crashpad.git",
-    "deps_file": "DEPS",
-    "managed": False,
-  },
-]
-"#;
-            fs::write(
-                self.config.crashpad_checkout.join(".gclient"),
-                gclient_content,
-            )?;
-
-            // Clone crashpad
-            let status = Command::new("git")
-                .args([
-                    "clone",
-                    "https://chromium.googlesource.com/crashpad/crashpad.git",
-                ])
-                .current_dir(&self.config.crashpad_checkout)
-                .status()?;
-
-            if !status.success() {
-                return Err("Failed to clone crashpad repository".into());
-            }
-
-            // Checkout specific version
-            let crashpad_commit = self.config.crashpad_commit();
-            if self.config.verbose {
-                eprintln!("Checking out crashpad commit: {crashpad_commit}");
-            }
-
-            let status = Command::new("git")
-                .args(["checkout", &crashpad_commit])
-                .current_dir(&self.config.crashpad_dir)
-                .status()?;
-
-            if !status.success() {
-                return Err(format!("Failed to checkout crashpad commit {crashpad_commit}").into());
-            }
-
-            // Run gclient sync
-            if self.config.verbose {
-                eprintln!("Running gclient sync...");
-            }
-
-            let status = Command::new("gclient")
-                .args(["sync", "--no-history", "-D"])
-                .current_dir(&self.config.crashpad_checkout)
-                .env("PATH", self.config.path_with_depot_tools())
-                .status()?;
-
-            if !status.success() {
-                return Err("Failed to run gclient sync".into());
-            }
-        } else {
-            // Check if we have the right version
-            let crashpad_commit = self.config.crashpad_commit();
-            let output = Command::new("git")
-                .args(["rev-parse", "HEAD"])
-                .current_dir(&self.config.crashpad_dir)
-                .output()?;
-
-            let current = String::from_utf8_lossy(&output.stdout).trim().to_string();
-            if current != crashpad_commit {
-                if self.config.verbose {
-                    eprintln!(
-                        "Crashpad version mismatch. Current: {current}, Expected: {crashpad_commit}"
-                    );
-                    eprintln!("Updating crashpad to correct version...");
-                }
-
-                // Fetch and checkout
-                Command::new("git")
-                    .args(["fetch", "origin"])
-                    .current_dir(&self.config.crashpad_dir)
-                    .status()?;
-
-                let status = Command::new("git")
-                    .args(["checkout", &crashpad_commit])
-                    .current_dir(&self.config.crashpad_dir)
-                    .status()?;
-
-                if !status.success() {
-                    return Err(
-                        format!("Failed to update crashpad to commit {crashpad_commit}").into(),
-                    );
-                }
-
-                // Re-run gclient sync for the new version
-                if self.config.verbose {
-                    eprintln!("Running gclient sync for updated version...");
-                }
-
-                let status = Command::new("gclient")
-                    .args(["sync", "--no-history", "-D"])
-                    .current_dir(&self.config.crashpad_checkout)
-                    .env("PATH", self.config.path_with_depot_tools())
-                    .status()?;
-
-                if !status.success() {
-                    return Err("Failed to run gclient sync after version update".into());
-                }
-            }
+        // Use BinaryToolManager for GN/Ninja
+        if self.config.verbose {
+            eprintln!("Setting up binary tools...");
         }
+
+        let tool_manager = BinaryToolManager::new(self.config.verbose)?;
+
+        // Ensure GN and Ninja are available
+        let gn_path = tool_manager.ensure_gn()?;
+        let ninja_path = tool_manager.ensure_ninja()?;
+
+        // Store paths for later use
+        self.gn_path = Some(gn_path.clone());
+        self.ninja_path = Some(ninja_path.clone());
+
+        if self.config.verbose {
+            eprintln!("GN: {}", gn_path.display());
+            eprintln!("Ninja: {}", ninja_path.display());
+        }
+
+        // Create symlinks/junctions for dependencies
+        self.create_dependency_links()?;
 
         Ok(())
     }
@@ -227,15 +75,21 @@ impl BuildPhases {
             eprintln!("Running GN with args: {gn_args}");
         }
 
-        let status = Command::new("gn")
-            .args([
-                "gen",
-                build_dir.to_str().unwrap(),
-                &format!("--args={gn_args}"),
-            ])
-            .current_dir(&self.config.crashpad_dir)
-            .env("PATH", self.config.path_with_depot_tools())
-            .status()?;
+        // Get GN path (set in prepare phase)
+        let gn_cmd = self
+            .gn_path
+            .as_ref()
+            .ok_or("GN path not set. prepare() phase may have failed")?;
+
+        let mut cmd = Command::new(gn_cmd);
+        cmd.args([
+            "gen",
+            build_dir.to_str().unwrap(),
+            &format!("--args={gn_args}"),
+        ])
+        .current_dir(&self.config.crashpad_dir);
+
+        let status = cmd.status()?;
 
         if !status.success() {
             return Err("Failed to generate build files with GN".into());
@@ -252,14 +106,20 @@ impl BuildPhases {
             eprintln!("Running ninja build...");
         }
 
-        let mut cmd = Command::new("ninja");
+        // Get Ninja path (set in prepare phase)
+        let ninja_cmd = self
+            .ninja_path
+            .as_ref()
+            .ok_or("Ninja path not set. prepare() phase may have failed")?;
+
+        let mut cmd = Command::new(ninja_cmd);
         cmd.arg("-C")
             .arg(build_dir.to_str().unwrap())
-            .current_dir(&self.config.crashpad_dir)
-            .env("PATH", self.config.path_with_depot_tools());
+            .current_dir(&self.config.crashpad_dir);
 
-        // iOS requires specific targets
+        // Build only required targets (skip tests)
         if self.config.target.contains("ios") {
+            // iOS requires specific targets
             for target in [
                 "client:client",
                 "client:common",
@@ -274,6 +134,26 @@ impl BuildPhases {
                 "third_party/mini_chromium/mini_chromium/base:base",
             ] {
                 cmd.arg(target);
+            }
+        } else {
+            // For other platforms, build only essential libraries (no tests)
+            for target in [
+                "client:client",
+                "client:common",
+                "util:util",
+                "minidump:format",
+                "minidump:minidump",
+                "snapshot:context",
+                "snapshot:snapshot",
+                "handler:common",
+                "third_party/mini_chromium/mini_chromium/base:base",
+            ] {
+                cmd.arg(target);
+            }
+
+            // Add handler executable for non-iOS platforms
+            if !self.config.target.contains("android") {
+                cmd.arg("handler:crashpad_handler");
             }
         }
 
@@ -296,7 +176,7 @@ impl BuildPhases {
         }
 
         let wrapper_cc = self.config.manifest_dir.join("crashpad_wrapper.cc");
-        let wrapper_obj = self.config.wrapper_obj_path();
+        let wrapper_obj = self.config.out_dir.join("crashpad_wrapper.o");
 
         let mut cmd = Command::new(&self.config.compiler);
 
@@ -349,8 +229,8 @@ impl BuildPhases {
             eprintln!("Creating static library...");
         }
 
-        let lib_path = self.config.static_lib_path();
-        let wrapper_obj = self.config.wrapper_obj_path();
+        let lib_path = self.config.out_dir.join("libcrashpad_wrapper.a");
+        let wrapper_obj = self.config.out_dir.join("crashpad_wrapper.o");
         let build_dir = self.config.build_dir();
 
         let status = match self.config.archiver.as_str() {
@@ -442,9 +322,9 @@ impl BuildPhases {
     /// Phase 7: Emit cargo link metadata
     pub fn emit_link(&self) -> Result<(), Box<dyn std::error::Error>> {
         let build_dir = self.config.build_dir();
-        let obj_dir = build_dir.join("obj");
 
-        // Library search paths
+        // Search in obj/ subdirectories
+        let obj_dir = build_dir.join("obj");
         let search_paths = [
             obj_dir.join("client"),
             obj_dir.join("util"),
@@ -457,6 +337,10 @@ impl BuildPhases {
 
         for path in &search_paths {
             println!("cargo:rustc-link-search=native={}", path.display());
+        }
+
+        if self.config.verbose {
+            eprintln!("Using build from: {}", obj_dir.display());
         }
 
         // Add Android NDK library path for C++ static libs
@@ -506,7 +390,7 @@ impl BuildPhases {
 
         // Verify handler exists (for platforms that use external handler)
         if !self.config.target.contains("ios") {
-            let handler_path = self.config.handler_path();
+            let handler_path = self.config.build_dir().join("crashpad_handler");
             if !handler_path.exists() {
                 println!(
                     "cargo:warning=crashpad_handler not found at {}. Crash reports cannot be uploaded automatically.",
@@ -597,6 +481,78 @@ impl BuildPhases {
             "cargo:rustc-env=CRASHPAD_HANDLER_PATH={}",
             handler_dest.display()
         );
+
+        Ok(())
+    }
+
+    /// Create symlinks/junctions for dependencies
+    fn create_dependency_links(&self) -> Result<(), Box<dyn std::error::Error>> {
+        let deps = vec![
+            ("mini_chromium", "mini_chromium"),
+            ("googletest", "googletest"),
+            ("zlib", "zlib"),
+            ("libfuzzer", "src"),
+            ("edo", "edo"),
+            ("lss", "lss"), // Linux Syscall Support for Android/Linux
+        ];
+
+        for (dep_name, subdir) in deps {
+            let target = self
+                .config
+                .manifest_dir
+                .parent()
+                .unwrap()
+                .join("third_party")
+                .join(dep_name);
+
+            let link = self
+                .config
+                .crashpad_dir
+                .join("third_party")
+                .join(dep_name)
+                .join(subdir);
+
+            // Skip if link already exists or target doesn't exist
+            if link.exists() || !target.exists() {
+                continue;
+            }
+
+            if self.config.verbose {
+                eprintln!(
+                    "Creating link for {}: {} -> {}",
+                    dep_name,
+                    link.display(),
+                    target.display()
+                );
+            }
+
+            // Ensure parent directory exists
+            if let Some(parent) = link.parent() {
+                fs::create_dir_all(parent)?;
+            }
+
+            // Create platform-specific link
+            #[cfg(unix)]
+            {
+                std::os::unix::fs::symlink(&target, &link)?;
+            }
+
+            #[cfg(windows)]
+            {
+                // On Windows, try to create a junction (directory symlink)
+                // This doesn't require admin privileges
+                std::os::windows::fs::symlink_dir(&target, &link).or_else(|_| {
+                    // If junction fails, fall back to copying
+                    if self.config.verbose {
+                        eprintln!(
+                            "Warning: Failed to create junction, copying {} instead",
+                            dep_name
+                        );
+                    }
+                    Self::copy_directory_impl(&target, &link)
+                })?;
+            }
+        }
 
         Ok(())
     }

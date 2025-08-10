@@ -1,9 +1,6 @@
 /target
 **/*.rs.bk
 
-# Third party dependencies managed by build.rs
-/third_party/
-
 # IDE
 .idea/
 .vscode/

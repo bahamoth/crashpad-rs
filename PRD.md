@@ -23,7 +23,7 @@ crashpad-rs is a safe Rust wrapper for Google's Crashpad crash reporting library
 
 Rust applications need reliable crash reporting to diagnose issues in production environments. While Google's Crashpad is a mature, battle-tested solution, its C++ API and complex Chromium build system create significant barriers for Rust developers:
 
-1. **Complex Build System**: Crashpad requires depot_tools, gclient, gn, and ninja - unfamiliar to most Rust developers
+1. **Complex Build System**: Crashpad requires GN and Ninja build tools - unfamiliar to most Rust developers
 2. **Platform Differences**: iOS requires in-process handling while other platforms use separate processes
 3. **FFI Complexity**: Direct C++ interop requires unsafe code and careful lifetime management
 4. **Distribution Challenges**: Bundling and deploying the crashpad_handler executable is error-prone
@@ -166,7 +166,7 @@ A backend engineer needs crash reporting for a server application:
 **I need** the library to build with standard cargo commands  
 **So that** I don't need to learn new build tools  
 **Links**: G-004  
-**Notes**: Hide depot_tools, gclient, gn, ninja complexity
+**Notes**: Hide GN and Ninja build complexity
 
 ### R-007: Handler Distribution
 

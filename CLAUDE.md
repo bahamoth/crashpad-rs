@@ -116,13 +116,13 @@ Date: {YYYY-MM-DD}
 ## 🏗️ Build System Notes
 
 ### Automatic Dependency Management
-- depot_tools is auto-downloaded to `third_party/depot_tools`
-- Crashpad source fetched via gclient to `third_party/crashpad_checkout`
-- DO NOT commit `third_party/` contents (gitignored)
+- Crashpad and dependencies managed as Git submodules in `third_party/`
+- No Python or depot_tools required
+- Submodules tracked in repository for reproducible builds
 
 ### Build Process
 1. `build.rs` manages all native dependencies
-2. Uses gclient for Chromium-style dependency management
+2. Downloads GN and Ninja binaries directly from CIPD/GitHub
 3. Generates build files with `gn`
 4. Compiles with `ninja`
 5. bindgen creates FFI bindings from `wrapper.h`
@@ -130,7 +130,7 @@ Date: {YYYY-MM-DD}
 ### Common Build Issues
 - **Link errors**: Run `make clean` then rebuild
 - **Android "ar not found"**: Create NDK symlinks (see README)
-- **depot_tools issues**: Delete `third_party/` and rebuild
+- **Submodule issues**: Run `git submodule update --init --recursive`
 
 ## 🚨 Critical Rules
 
@@ -252,5 +252,5 @@ Follow [Conventional Commits](./CONVENTIONS.md#commit-messages):
 Examples:
 - `feat(android): add Android NDK cross-compilation support`
 - `fix(ios): resolve in-process handler initialization`
-- `build: add depot_tools auto-download in build.rs`
+- `build: replace depot_tools with git submodules`
 - `refactor(sys): simplify platform detection logic`
