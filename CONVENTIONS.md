@@ -19,7 +19,7 @@ This document defines the development standards and practices for the crashpad-r
 | Linting | clippy | Default | Manual | ⚠️ TODO |
 | Testing | cargo nextest | Cargo.toml | Manual | ✅ |
 | Commits | Conventional | Manual | None | ⚠️ TODO |
-| Dependencies | cargo/gclient | build.rs | Build step | ✅ |
+| Dependencies | cargo/submodules | build.rs | Build step | ✅ |
 
 ## Code Style
 
@@ -102,7 +102,7 @@ Types:
 Examples:
 - `feat(android): add Android NDK cross-compilation support`
 - `fix(ios): resolve in-process handler initialization`
-- `build: add depot_tools auto-download in build.rs`
+- `build: replace depot_tools with Git submodules`
 - `refactor: simplify Makefile platform detection`
 
 ### Merge Strategy
@@ -237,9 +237,9 @@ cargo build --target x86_64-pc-windows-gnu
 - iOS builds require macOS; no Linux cross-compilation available
 
 ### Build Process(Internal)
-1. `build.rs` clones depot_tools to `third_party/`
-2. Creates `.gclient` configuration
-3. Runs `gclient sync` for Crashpad dependencies
+1. Git submodules manage all dependencies in `third_party/`
+2. `build.rs` downloads GN/Ninja binaries directly from CIPD
+3. Creates symlinks/junctions for dependency resolution
 4. Generates build files with `gn`
 5. Builds with `ninja`
 6. `bindgen` creates FFI bindings from `wrapper.h`
@@ -286,10 +286,10 @@ cargo build --target aarch64-apple-ios-sim --example ios_simulator_test
 - Use exact versions for sys crate dependencies
 
 ### Native Dependencies
-- Managed by `build.rs`
-- Downloaded to `third_party/` (gitignored)
-- Chromium build tools (depot_tools, gclient, gn, ninja)
-- Never commit third_party content
+- Managed by Git submodules in `third_party/`
+- Build tools (GN, Ninja) downloaded automatically to OS cache
+- Initialize with: `git submodule update --init --recursive`
+- Submodules are committed as references
 
 ### Update Policy
 - Security updates: Immediate
@@ -406,7 +406,7 @@ Applications using crashpad-rs require the `crashpad_handler` executable at runt
 - Examples and tests work out of the box
 
 #### Production (Release Builds)
-- Environment variables NOT automatically set
+- Handler path set via `CRASHPAD_HANDLER_PATH` cargo env
 - Handler must be distributed with application
 - Explicit configuration required
 
@@ -421,7 +421,7 @@ Applications using crashpad-rs require the `crashpad_handler` executable at runt
 
 2. **Locate the handler**:
    - From `xtask dist`: `dist/bin/crashpad_handler`
-   - From build directory: `third_party/crashpad_checkout/crashpad/out/{platform}/crashpad_handler`
+   - From build directory: `third_party/crashpad/out/{platform}/crashpad_handler`
    - Platform names: `crashpad_handler` (Unix), `crashpad_handler.exe` (Windows)
 
 3. **Package structure**:

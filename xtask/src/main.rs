@@ -50,15 +50,10 @@ fn main() -> Result<()> {
 fn build(sh: &Shell, release: bool) -> Result<()> {
     println!("Building crashpad-rs...");
 
-    if release {
-        cmd!(sh, "cargo build --release")
-            .run()
-            .context("Failed to build")?;
-    } else {
-        cmd!(sh, "cargo build").run().context("Failed to build")?;
-    }
+    let mode = if release { "--release" } else { "" };
+    cmd!(sh, "cargo build {mode}").run()?;
 
-    println!("Build complete!");
+    println!("✅ Build completed successfully!");
     Ok(())
 }
 
@@ -110,142 +105,114 @@ fn dist(sh: &Shell, output_dir: &Path) -> Result<()> {
     println!("✓ Copied crashpad_handler to dist/bin/");
 
     // Copy Rust libraries
-    let target_release = workspace_root.join("target/release");
+    let target_dir = workspace_root.join("target/release");
+    let lib_files = ["libcrashpad.rlib", "libcrashpad_sys.rlib"];
 
-    // Copy .rlib files (Rust libraries)
-    for entry in std::fs::read_dir(&target_release)? {
-        let entry = entry?;
-        let path = entry.path();
-        if let Some(name) = path.file_name() {
-            let name_str = name.to_string_lossy();
-            if name_str.starts_with("libcrashpad")
-                && (name_str.ends_with(".rlib") || name_str.ends_with(".a"))
-            {
-                let dest = lib_dir.join(name);
-                sh.copy_file(&path, &dest)?;
-                println!("✓ Copied library: {name_str}");
-            }
+    for lib in &lib_files {
+        let src = target_dir.join(lib);
+        if src.exists() {
+            let dest = lib_dir.join(lib);
+            sh.copy_file(&src, &dest)?;
+            println!("✓ Copied {lib} to dist/lib/");
         }
     }
 
-    // Copy header files
-    let crashpad_sys_dir = workspace_root.join("crashpad-sys");
-    if crashpad_sys_dir.join("wrapper.h").exists() {
-        sh.copy_file(
-            crashpad_sys_dir.join("wrapper.h"),
-            include_dir.join("crashpad_wrapper.h"),
-        )?;
-        println!("✓ Copied header: crashpad_wrapper.h");
+    // Copy include files
+    let sys_dir = workspace_root.join("crashpad-sys");
+    let wrapper_h = sys_dir.join("wrapper.h");
+    if wrapper_h.exists() {
+        sh.copy_file(&wrapper_h, include_dir.join("wrapper.h"))?;
+        println!("✓ Copied wrapper.h to dist/include/");
     }
 
-    // Create README for distribution
+    // Create README for the distribution
     let readme_content = format!(
-        r#"# Crashpad-rs Distribution Package
+        r#"# Crashpad Distribution Package
 
 Platform: {platform}
-
-## Directory Structure
-
-```
-dist/
-├── lib/          # Rust libraries (.rlib, .a)
-├── include/      # C/C++ header files
-├── bin/          # Executables (crashpad_handler)
-└── README.md     # This file
-```
+Build: Release
 
 ## Contents
 
-- `bin/{handler_name}` - The Crashpad handler executable
-- `lib/libcrashpad*.rlib` - Rust library files
-- `include/crashpad_wrapper.h` - C API header
+- `bin/` - Crashpad handler executable
+- `lib/` - Rust libraries
+- `include/` - Header files
 
-## Integration
+## Usage
 
-### For Rust Projects
+1. Set the handler path in your code:
+   ```rust
+   use crashpad::CrashpadConfig;
 
-Add to your `Cargo.toml`:
-```toml
-[dependencies]
-crashpad = {{ path = "path/to/dist/lib" }}
-```
+   let config = CrashpadConfig::new()
+       .database_path("./crashes")
+       .handler_path("./dist/bin/{handler_name}")
+       .build();
+   ```
 
-### Usage Example
+2. Link the libraries in your Cargo.toml or build script.
 
-```rust
-use crashpad::{{CrashpadClient, CrashpadConfig}};
-use std::collections::HashMap;
-
-let client = CrashpadClient::new()?;
-
-let config = CrashpadConfig::builder()
-    .handler_path("/path/to/crashpad_handler")  // Or leave empty for auto-detection
-    .database_path("./crashes")
-    .build();
-
-let mut annotations = HashMap::new();
-annotations.insert("version".to_string(), "1.0.0".to_string());
-
-client.start_with_config(&config, &annotations)?;
-```
-
-## Deployment
-
-When deploying your application:
-1. Copy `bin/{handler_name}` to the same directory as your executable
-2. Or install it system-wide in `/usr/local/bin` (Unix) or Program Files (Windows)
-3. Or set `CRASHPAD_HANDLER` environment variable to its location
+For more information, see the main README.md in the repository.
 "#
     );
 
     sh.write_file(output_dir.join("README.md"), readme_content)?;
-
-    // Create a simple Cargo.toml for the distribution
-    let cargo_toml = r#"[package]
-name = "crashpad-dist"
-version = "0.1.0"
-edition = "2021"
-
-[lib]
-path = "lib/libcrashpad.rlib"
-
-[dependencies]
-crashpad-sys = { path = "lib" }
-"#
-    .to_string();
-    sh.write_file(output_dir.join("Cargo.toml"), cargo_toml)?;
+    println!("✓ Created README.md");
 
     println!(
-        "\n✓ Distribution package created at: {}",
+        "\n✅ Distribution package created at: {}",
         output_dir.display()
     );
-    println!("  Platform: {platform}");
-    println!("\nDirectory structure:");
-    println!("  lib/      - Rust libraries");
-    println!("  include/  - Header files");
-    println!("  bin/      - crashpad_handler executable");
-    println!("  examples/ - Example applications");
-
     Ok(())
 }
 
 fn test(sh: &Shell) -> Result<()> {
     println!("Running tests...");
-    cmd!(sh, "cargo test").run()?;
+
+    // Run unit tests
+    cmd!(sh, "cargo test --lib").run()?;
+
+    // Run integration tests with nextest for process isolation
+    cmd!(sh, "cargo nextest run --test '*'").run()?;
+
+    println!("✅ All tests passed!");
     Ok(())
 }
 
 fn clean(sh: &Shell) -> Result<()> {
     println!("Cleaning build artifacts...");
+
+    // Clean Rust target
     cmd!(sh, "cargo clean").run()?;
 
-    // Also clean distribution directory
-    let dist_dir = PathBuf::from("dist");
-    if dist_dir.exists() {
-        sh.remove_path(&dist_dir)?;
-        println!("✓ Removed dist/");
+    // Clean native build artifacts
+    let workspace_root = find_workspace_root(sh)?;
+    let native_dirs = ["third_party/crashpad_checkout", "third_party/depot_tools"];
+
+    for dir in &native_dirs {
+        let path = workspace_root.join(dir);
+        if path.exists() {
+            sh.remove_path(&path)?;
+            println!("✓ Removed {dir}");
+        }
     }
 
+    println!("✅ Clean completed!");
+    Ok(())
+}
+
+fn install_tools(sh: &Shell) -> Result<()> {
+    println!("Installing development tools...");
+
+    // Install cargo-nextest for better test isolation
+    println!("Installing cargo-nextest...");
+    cmd!(sh, "cargo install cargo-nextest --locked").run()?;
+
+    // Install cargo-ndk for Android cross-compilation
+    println!("Installing cargo-ndk...");
+    cmd!(sh, "cargo install cargo-ndk").run()?;
+
+    println!("✅ Tools installed successfully!");
     Ok(())
 }
 
@@ -255,100 +222,33 @@ fn find_workspace_root(sh: &Shell) -> Result<PathBuf> {
         .context("Failed to get cargo metadata")?;
 
     let metadata: serde_json::Value = serde_json::from_str(&output)?;
-    let workspace_root = metadata["workspace_root"]
+    let root = metadata["workspace_root"]
         .as_str()
-        .context("Failed to find workspace root")?;
+        .context("Failed to get workspace root")?;
 
-    Ok(PathBuf::from(workspace_root))
+    Ok(PathBuf::from(root))
 }
 
 fn detect_platform() -> (&'static str, &'static str) {
     let os = if cfg!(target_os = "macos") {
-        "macos"
+        "mac"
     } else if cfg!(target_os = "linux") {
         "linux"
     } else if cfg!(target_os = "windows") {
-        "windows"
+        "win"
     } else {
         "unknown"
     };
 
     let arch = if cfg!(target_arch = "x86_64") {
-        "x86_64"
+        "x64"
     } else if cfg!(target_arch = "aarch64") {
-        "aarch64"
+        "arm64"
+    } else if cfg!(target_arch = "x86") {
+        "x86"
     } else {
         "unknown"
     };
 
     (os, arch)
-}
-
-struct Tool {
-    name: &'static str,
-    check_cmd: &'static str,
-    install_cmd: &'static str,
-    description: &'static str,
-}
-
-fn install_tools(sh: &Shell) -> Result<()> {
-    println!("Installing external development tools...\n");
-
-    let tools = vec![
-        Tool {
-            name: "cargo-nextest",
-            check_cmd: "cargo nextest --version",
-            install_cmd: "cargo install cargo-nextest",
-            description: "Test runner with process isolation",
-        },
-        Tool {
-            name: "cargo-ndk",
-            check_cmd: "cargo ndk --version",
-            install_cmd: "cargo install cargo-ndk",
-            description: "Android NDK cross-compilation helper",
-        },
-    ];
-
-    let mut installed_count = 0;
-    let mut already_installed_count = 0;
-
-    for tool in &tools {
-        print!("Checking {}... ", tool.name);
-        // xshell의 cmd!는 literal string만 받으므로 직접 실행
-        let check_result = sh.cmd("sh").arg("-c").arg(tool.check_cmd).quiet().read();
-
-        match check_result {
-            Ok(version) => {
-                // 첫 줄만 가져오기 (버전 정보)
-                let version_line = version.lines().next().unwrap_or(&version);
-                println!("✓ Already installed ({})", version_line.trim());
-                already_installed_count += 1;
-            }
-            Err(_) => {
-                println!("Not found. Installing...");
-                sh.cmd("sh")
-                    .arg("-c")
-                    .arg(tool.install_cmd)
-                    .run()
-                    .with_context(|| format!("Failed to install {}", tool.name))?;
-                println!("  ✓ {} installed successfully", tool.name);
-                installed_count += 1;
-            }
-        }
-    }
-
-    println!("\n✅ All tools ready!");
-    if installed_count > 0 {
-        println!("  {installed_count} tool(s) newly installed");
-    }
-    if already_installed_count > 0 {
-        println!("  {already_installed_count} tool(s) already installed");
-    }
-
-    println!("\nAvailable tools:");
-    for tool in &tools {
-        println!("  • {}: {}", tool.name, tool.description);
-    }
-
-    Ok(())
 }

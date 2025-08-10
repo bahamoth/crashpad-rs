@@ -19,8 +19,8 @@ crashpad-rs/
 │   ├── build.rs           # Build script for native compilation
 │   ├── build/             # Build system modules
 │   │   ├── config.rs      # Build configuration
-│   │   ├── platform.rs    # Platform-specific build logic
-│   │   └── mod.rs         # Build orchestration
+│   │   ├── phases.rs      # Build phases orchestration
+│   │   └── tools.rs       # Binary tool management (GN/Ninja)
 │   ├── crashpad_wrapper.cc # C++ wrapper for Crashpad API
 │   ├── wrapper.h          # Header for FFI bindings
 │   └── src/               # Generated FFI bindings
@@ -32,9 +32,14 @@ crashpad-rs/
 │   ├── examples/         # Usage examples
 │   └── tests/            # Integration tests
 ├── xtask/                 # Development task runner
-├── third_party/           # Auto-managed dependencies (gitignored)
-│   ├── depot_tools/      # Chromium build tools
-│   └── crashpad_checkout/ # Crashpad source and deps
+├── third_party/           # Git submodules for dependencies
+│   ├── crashpad/         # Crashpad source
+│   ├── mini_chromium/    # Mini Chromium library
+│   ├── googletest/       # Google Test framework
+│   ├── zlib/             # Compression library
+│   ├── libfuzzer/        # Fuzzing library
+│   ├── edo/              # EDO library
+│   └── lss/              # Linux Syscall Support
 ├── CLAUDE.md             # AI assistant guidelines
 ├── PRD.md                # Product requirements document
 ├── ARCHITECTURE.md      # System design documentation
@@ -47,7 +52,6 @@ crashpad-rs/
 
 - Rust 1.70+
 - C/C++ compiler (gcc/clang)
-- Python 3 (for depot_tools)
 - libclang (for bindgen)
 - Platform SDKs:
   - Android: NDK r22+ with symlinks configured
@@ -62,8 +66,9 @@ crashpad-rs/
    cd crashpad-rs
    ```
 
-2. Build the project (auto-fetches dependencies):
+2. Initialize submodules and build:
    ```bash
+   git submodule update --init --recursive
    cargo build --package crashpad-sys
    cargo build --package crashpad
    ```
@@ -97,8 +102,8 @@ For detailed cross-compilation instructions, see [Conventions](./CONVENTIONS.md#
 - **crashpad-sys**: Low-level FFI bindings using bindgen, handles native compilation
 - **crashpad**: Safe Rust API providing ergonomic interface with error handling
 
-### Automatic Dependency Management
-The build system automatically manages Crashpad and its dependencies through depot_tools, eliminating manual submodule management. All dependencies are fetched to `third_party/` during the build.
+### Git Submodule Dependencies
+The project uses Git submodules for dependency management, following the exact hierarchy from Crashpad's DEPS file. All dependencies are in `third_party/` and must be initialized with `git submodule update --init --recursive`.
 
 ### Cross-Platform Handler
 - Desktop platforms use external `crashpad_handler` executable
@@ -106,10 +111,11 @@ The build system automatically manages Crashpad and its dependencies through dep
 - Handler path resolution follows platform conventions
 
 ### Build System
-Uses Chromium's official build workflow:
-- gclient for dependency management
-- gn for build file generation
-- ninja for compilation
+Uses streamlined native build tools:
+- Git submodules for dependency management
+- GN (downloaded automatically) for build file generation  
+- Ninja (downloaded automatically) for compilation
+- No Python or depot_tools required
 
 ## Development
 

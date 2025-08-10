@@ -1,4 +1,4 @@
-.PHONY: clean build rebuild dist
+.PHONY: clean clean-cache build rebuild dist test help
 
 # Platform detection
 UNAME_S := $(shell uname -s)
@@ -36,11 +36,25 @@ build-release:
 	cargo build --release --package crashpad
 
 clean:
-	rm -rf third_party
-	rm -rf $(DIST_DIR)
+	# Clean build artifacts
+	rm -rf target/
+	# Clean binary tool cache (optional, commented out by default)
+	# rm -rf ~/.crashpad-cache
 	cargo clean
 
 rebuild: clean build
+
+# Clean binary tool cache (GN and Ninja)
+clean-cache:
+	@echo "Cleaning binary tool cache..."
+	@if [ "$$(uname -s)" = "Darwin" ]; then \
+		rm -rf ~/Library/Caches/crashpad-cache; \
+	elif [ "$$(uname -s)" = "Linux" ]; then \
+		rm -rf ~/.cache/crashpad-cache; \
+	else \
+		echo "Windows: Please manually delete %LOCALAPPDATA%\\crashpad-cache"; \
+	fi
+	@echo "✓ Binary tool cache cleared"
 
 # Create distribution package with crashpad_handler
 dist: build-release
@@ -49,13 +63,23 @@ dist: build-release
 	@mkdir -p $(DIST_DIR)/include
 	@mkdir -p $(DIST_DIR)/bin
 	
-	# Copy crashpad_handler
-	@if [ -f "third_party/crashpad_checkout/crashpad/out/$(PLATFORM)/$(HANDLER_NAME)" ]; then \
-		cp third_party/crashpad_checkout/crashpad/out/$(PLATFORM)/$(HANDLER_NAME) $(DIST_DIR)/bin/; \
-		chmod +x $(DIST_DIR)/bin/$(HANDLER_NAME); \
-		echo "✓ Copied crashpad_handler to dist/bin/"; \
-	else \
-		echo "ERROR: crashpad_handler not found at third_party/crashpad_checkout/crashpad/out/$(PLATFORM)/$(HANDLER_NAME)"; \
+	# Copy crashpad_handler - check multiple possible locations
+	@HANDLER_FOUND=0; \
+	for HANDLER_PATH in \
+		"target/release/$(HANDLER_NAME)" \
+		"target/$(shell rustc -vV | sed -n 's/host: //p')/release/$(HANDLER_NAME)" \
+		"target/*/release/crashpad_build/$(HANDLER_NAME)" \
+		"third_party/crashpad_checkout/crashpad/out/$(PLATFORM)/$(HANDLER_NAME)"; do \
+		if [ -f "$$HANDLER_PATH" ]; then \
+			cp "$$HANDLER_PATH" $(DIST_DIR)/bin/; \
+			chmod +x $(DIST_DIR)/bin/$(HANDLER_NAME); \
+			echo "✓ Copied crashpad_handler from $$HANDLER_PATH to dist/bin/"; \
+			HANDLER_FOUND=1; \
+			break; \
+		fi \
+	done; \
+	if [ $$HANDLER_FOUND -eq 0 ]; then \
+		echo "ERROR: crashpad_handler not found in any expected location"; \
 		echo "Make sure to build crashpad-sys first"; \
 		exit 1; \
 	fi
@@ -120,6 +144,7 @@ help:
 	@echo "  make build         - Build the project (debug mode)"
 	@echo "  make build-release - Build the project (release mode)"
 	@echo "  make clean         - Clean all build artifacts"
+	@echo "  make clean-cache   - Clean binary tool cache (GN/Ninja)"
 	@echo "  make rebuild       - Clean and rebuild"
 	@echo "  make dist          - Create distribution package with crashpad_handler"
 	@echo "  make test          - Run tests"

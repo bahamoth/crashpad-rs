@@ -96,5 +96,5 @@ Reference architectural decisions from DECISIONS.md
 ### Project Context
 - FFI wrapper for Google Crashpad
 - Two-crate structure: crashpad-sys (FFI) and crashpad (safe wrapper)
-- Uses depot_tools and gclient for dependency management
+- Uses Git submodules for dependency management
 - Cross-platform support for macOS, iOS, Linux, Android, Windows

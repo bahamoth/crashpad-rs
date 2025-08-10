@@ -14,7 +14,12 @@ links = "crashpad"
 [build-dependencies]
 bindgen = "0.69"
 cc = "1.0"
+chrono = "0.4"
+dirs = "5.0"
+serde_json = "1.0"
 shellexpand = "3.1"
+ureq = "2.9"
+zip = "0.6"
 
 [features]
 default = []

@@ -193,7 +193,7 @@ Crash reporting should never crash the application:
 ## Build System Design Principles
 
 ### Complete Encapsulation
-The Chromium build complexity (depot_tools, gclient, gn, ninja) is completely hidden from users. The build process should be:
+The native build complexity is completely hidden from users. The build process should be:
 - **Automated**: No manual steps required
 - **Reproducible**: Same inputs → same outputs
 - **Self-contained**: All dependencies managed internally

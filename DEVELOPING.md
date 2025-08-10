@@ -18,12 +18,13 @@ This guide covers the development workflow for crashpad-rs, including environmen
 ### Required Tools
 
 - **Rust**: 1.70+ (install via [rustup](https://rustup.rs/))
-- **Python**: 3.8+ (required for depot_tools)
-- **Git**: For source control and depot_tools
+- **Git**: For source control and submodules
 - **C++ Compiler**: 
   - macOS: Xcode Command Line Tools (`xcode-select --install`)
   - Linux: GCC or Clang (`apt install build-essential`)
   - Windows: Visual Studio 2019+ or MinGW
+
+> **Note**: Python and depot_tools are no longer required! Git submodules handle all dependencies.
 
 ### Platform-Specific Requirements
 
@@ -89,9 +90,28 @@ This guide covers the development workflow for crashpad-rs, including environmen
 ```bash
 git clone https://github.com/your-org/crashpad-rs.git
 cd crashpad-rs
+
+# Initialize all submodules (required!)
+git submodule update --init --recursive
 ```
 
-### 2. Install Development Tools
+### 2. Submodule Structure
+
+This project uses Git submodules to manage Crashpad and its dependencies following the exact DEPS hierarchy.
+
+```
+third_party/
+├── crashpad/           # Google Crashpad (submodule)
+├── mini_chromium/      # Base library (submodule)
+├── googletest/         # Test framework (submodule)
+├── zlib/              # Compression library (submodule)
+├── libfuzzer/         # Fuzzing library (submodule)
+└── edo/               # iOS library (submodule)
+```
+
+The build system automatically creates symlinks/junctions inside `crashpad/third_party/` to these dependencies.
+
+### 3. Install Development Tools
 
 We provide an xtask command to install all required development tools:
 
@@ -146,82 +166,56 @@ cargo clean
 ### What's happening in the Build?
 
 The build system automatically:
-1. Downloads crashpad and depot_tools (Chromium build tools)
-2. Sync mini-chromium via gclient
+1. Downloads GN and Ninja binaries directly from CIPD
+2. Creates symlinks/junctions for submodule dependencies
 3. Configures build with GN
 4. Compiles with Ninja
 5. Generates Rust bindings with bindgen
 6. Creates static libraries
 
-Build artifacts are cached in `third_party/` (gitignored).
+Build tools are cached in OS-specific cache directories.
 
 ## Native Dependencies Version Management
 
-crashpad-rs pins specific versions of native dependencies to ensure reproducible builds across all environments:
+crashpad-rs uses Git submodules to pin specific versions of native dependencies:
 
-### Current Versions
+### Current Submodule Versions
 
-- **crashpad**: `811b04296520206655bf9bfde5e800181a9282f6`
-- **depot_tools**: `322a071997b51e483fac86d4f61a98934950923e`
+All dependency versions are managed through Git submodules in `third_party/`:
+- crashpad
+- mini_chromium  
+- googletest
+- zlib
+- libfuzzer
+- edo
+- lss (for Android/Linux)
 
-These versions are defined in `crashpad-sys/build/config.rs` and are automatically used during the build process.
+### Updating Submodule Versions
 
-### Testing with Different Versions
-
-You can override the pinned versions using environment variables:
+To update a specific dependency:
 
 ```bash
-# Test with a different crashpad version
-export CRASHPAD_COMMIT=<commit_hash>
-cargo build --package crashpad-sys
+# Update specific submodule to latest
+cd third_party/crashpad
+git checkout <new_commit>
+cd ../..
+git add third_party/crashpad
+git commit -m "chore: update crashpad to <new_commit>"
 
-# Test with a different depot_tools version
-export DEPOT_TOOLS_COMMIT=<commit_hash>
-cargo build --package crashpad-sys
-
-# Use both custom versions
-export CRASHPAD_COMMIT=<commit_hash>
-export DEPOT_TOOLS_COMMIT=<commit_hash>
-cargo build --package crashpad-sys
+# Or update all submodules to latest
+git submodule update --remote --merge
 ```
 
-### Finding Available Versions
+### Build Tool Versions
 
-- **Crashpad commits**: https://chromium.googlesource.com/crashpad/crashpad
-- **depot_tools commits**: https://chromium.googlesource.com/chromium/tools/depot_tools
+GN and Ninja versions are defined in `crashpad-sys/build/tools.rs`:
+- GN version is matched to Crashpad's requirements
+- Ninja is downloaded from GitHub releases
 
-### Updating Pinned Versions
-
-To permanently update the pinned versions:
-
-1. Test the new versions locally:
-   ```bash
-   export CRASHPAD_COMMIT=<new_commit>
-   export DEPOT_TOOLS_COMMIT=<new_commit>
-   cargo test --lib
-   cargo nextest run --test '*'
-   ```
-
-2. If tests pass, update the constants in `crashpad-sys/build/config.rs`:
-   ```rust
-   pub const CRASHPAD_COMMIT: &str = "<new_commit>";
-   pub const DEPOT_TOOLS_COMMIT: &str = "<new_commit>";
-   ```
-
-3. Clean build to verify:
-   ```bash
-   make clean
-   cargo build --package crashpad-sys
-   ```
-
-### Version Checking
-
-The build system automatically:
-- Checks if the existing checkout matches the pinned version
-- Updates to the correct version if there's a mismatch
-- Re-runs `gclient sync` after version changes
-
-This ensures everyone builds with the same native dependency versions, improving CI reliability and cross-team collaboration.
+These tools are cached in OS-specific cache directories:
+- macOS: `~/Library/Caches/crashpad-rs/`
+- Linux: `~/.cache/crashpad-rs/`
+- Windows: `%LOCALAPPDATA%\crashpad-rs\Cache\`
 
 ## Cross-Compilation
 
@@ -539,14 +533,14 @@ export ANDROID_NDK_HOME=/path/to/ndk
 export ANDROID_NDK_ROOT=$ANDROID_NDK_HOME
 ```
 
-#### depot_tools Download Failures
+#### Submodule Issues
 
-**Problem**: Failed to clone depot_tools or build errors after depot_tools update
+**Problem**: Missing dependencies or build failures
 
 **Solution**: 
-1. Check if Crashpad's build requirements have changed upstream
+1. Initialize submodules: `git submodule update --init --recursive`
 2. Clean everything and rebuild: `make clean && cargo build`
-3. May need to update `build.rs` if Crashpad's build process has changed
+3. Check that symlinks/junctions were created in `third_party/crashpad/third_party/`
 
 ### Test Failures
 
@@ -591,9 +585,14 @@ crashpad-rs/
 │   ├── examples/         # Example programs
 │   └── tests/           # Integration tests
 ├── xtask/               # Development automation
-└── third_party/         # Build dependencies (gitignored)
-    ├── depot_tools/     # Chromium build tools
-    └── crashpad_checkout/ # Crashpad source
+└── third_party/         # Git submodules
+    ├── crashpad/        # Crashpad source
+    ├── mini_chromium/   # Base library
+    ├── googletest/      # Test framework
+    ├── zlib/            # Compression
+    ├── libfuzzer/       # Fuzzing
+    ├── edo/             # iOS library
+    └── lss/             # Linux syscalls
 ```
 
 ## Contributing
