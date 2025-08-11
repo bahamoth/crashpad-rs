@@ -1,5 +1,11 @@
 # crashpad-rs
 
+[![Build Status](https://github.com/bahamoth/crashpad-rs/workflows/Build%20Android/badge.svg)](https://github.com/bahamoth/crashpad-rs/actions/workflows/build-android.yml)
+[![Build Status](https://github.com/bahamoth/crashpad-rs/workflows/Build%20iOS/badge.svg)](https://github.com/bahamoth/crashpad-rs/actions/workflows/build-ios.yml)
+[![Build Status](https://github.com/bahamoth/crashpad-rs/workflows/Build%20macOS/badge.svg)](https://github.com/bahamoth/crashpad-rs/actions/workflows/build-macos.yml)
+[![Build Status](https://github.com/bahamoth/crashpad-rs/workflows/Build%20Linux/badge.svg)](https://github.com/bahamoth/crashpad-rs/actions/workflows/build-linux.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 Rust bindings for Google Crashpad crash reporting system.
 
 ## Project Structure
