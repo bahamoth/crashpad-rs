@@ -1,4 +1,5 @@
 use anyhow::{Context, Result};
+use chrono::Local;
 use clap::{Parser, Subcommand};
 use regex::Regex;
 use std::collections::HashMap;
@@ -59,8 +60,11 @@ fn main() -> Result<()> {
 fn build(sh: &Shell, release: bool) -> Result<()> {
     println!("Building crashpad-rs...");
 
-    let mode = if release { "--release" } else { "" };
-    cmd!(sh, "cargo build {mode}").run()?;
+    if release {
+        cmd!(sh, "cargo build --release").run()?;
+    } else {
+        cmd!(sh, "cargo build").run()?;
+    }
 
     println!("✅ Build completed successfully!");
     Ok(())
@@ -327,8 +331,8 @@ fn update_deps(sh: &Shell, create_pr: bool) -> Result<()> {
 
     if create_pr {
         // Step 7: Create branch and commit
-        let date = cmd!(sh, "date +%Y%m%d").read()?;
-        let branch_name = format!("auto/update-deps-{}", date.trim());
+        let date = Local::now().format("%Y%m%d").to_string();
+        let branch_name = format!("auto/update-deps-{date}");
 
         println!("\n🌿 Creating branch: {branch_name}");
         cmd!(sh, "git checkout -b {branch_name}").run()?;
