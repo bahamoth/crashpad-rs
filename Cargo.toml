@@ -1,5 +1,6 @@
 [workspace]
 members = ["crashpad-sys", "crashpad", "xtask"]
+default-members = ["crashpad-sys", "crashpad"]
 resolver = "2"
 
 [workspace.package]
