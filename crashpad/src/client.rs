@@ -179,7 +179,7 @@ impl CrashpadClient {
 
         // For iOS, we start the in-process handler
         let success = unsafe {
-            crashpad_sys::crashpad_client_start_in_process_handler(
+            crashpad_rs_sys::crashpad_client_start_in_process_handler(
                 self.handle,
                 database_path_c.as_ptr(),
                 url_c.as_ref().map_or(ptr::null(), |u| u.as_ptr()),
@@ -192,13 +192,13 @@ impl CrashpadClient {
         if success {
             // Start processing pending reports first
             unsafe {
-                crashpad_sys::crashpad_client_start_processing_pending_reports();
+                crashpad_rs_sys::crashpad_client_start_processing_pending_reports();
             }
 
             // Then process any intermediate dumps from previous sessions
             // This needs to be called after StartProcessingPendingReports
             unsafe {
-                crashpad_sys::crashpad_client_process_intermediate_dumps();
+                crashpad_rs_sys::crashpad_client_process_intermediate_dumps();
             }
             Ok(())
         } else {
