@@ -157,12 +157,55 @@ jobs:
             
             # Push the test binary, handler, and required libraries to emulator
             adb push target/x86_64-linux-android/release/examples/crashpad_test_cli /data/local/tmp/
-            adb push target/x86_64-linux-android/release/libcrashpad_handler.so /data/local/tmp/
+            
+            # Find the handler (could be in different locations)
+            HANDLER_SO=$(find target/x86_64-linux-android/release -name "libcrashpad_handler.so" -o -name "crashpad_handler" | head -1)
+            if [ -z "$HANDLER_SO" ]; then
+              # Try build directory
+              HANDLER_SO=$(find target/x86_64-linux-android/release/build -name "libcrashpad_handler.so" | head -1)
+            fi
+            
+            if [ -n "$HANDLER_SO" ]; then
+              echo "Found handler at: $HANDLER_SO"
+              adb push "$HANDLER_SO" /data/local/tmp/libcrashpad_handler.so
+            else
+              echo "WARNING: Handler not found, will try to proceed anyway"
+            fi
             
             # Find and push libc++_shared.so from NDK
-            LIBCXX=$(find $ANDROID_NDK_HOME -name "libc++_shared.so" -path "*/x86_64/*" | head -1)
-            echo "Found libc++_shared.so at: $LIBCXX"
-            adb push "$LIBCXX" /data/local/tmp/
+            echo "Searching for libc++_shared.so in NDK..."
+            
+            # NDK 26 has a specific structure for libc++_shared.so
+            # Try different API levels (29 is our minimum)
+            for API in 29 30 31 32 33 34; do
+              LIBCXX="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/x86_64-linux-android/$API/libc++_shared.so"
+              if [ -f "$LIBCXX" ]; then
+                echo "Found libc++_shared.so at: $LIBCXX (API $API)"
+                break
+              fi
+            done
+            
+            # If not found with API level, try without
+            if [ ! -f "$LIBCXX" ]; then
+              LIBCXX="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/x86_64-linux-android/libc++_shared.so"
+            fi
+            
+            # Last resort - find any x86_64 version
+            if [ ! -f "$LIBCXX" ]; then
+              echo "Searching for any x86_64 libc++_shared.so..."
+              LIBCXX=$(find $ANDROID_NDK_HOME -path "*/x86_64-linux-android*" -name "libc++_shared.so" -type f | head -1)
+            fi
+            
+            if [ -f "$LIBCXX" ]; then
+              echo "Pushing libc++_shared.so from: $LIBCXX"
+              adb push "$LIBCXX" /data/local/tmp/
+              adb shell ls -la /data/local/tmp/libc++_shared.so
+            else
+              echo "ERROR: Could not find libc++_shared.so for x86_64"
+              echo "NDK structure:"
+              ls -la $ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/ || true
+              exit 1
+            fi
             
             adb shell chmod +x /data/local/tmp/crashpad_test_cli
             adb shell chmod +x /data/local/tmp/libcrashpad_handler.so
