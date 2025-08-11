@@ -58,11 +58,11 @@ jobs:
   # Android emulator test (runs on macOS for better performance)
   android-emulator-test:
     if: github.actor != 'release-please[bot]'
-    runs-on: macos-13  # Use Intel-based runner for x86_64 emulator
+    runs-on: macos-latest  # Use latest macOS runner (Apple Silicon)
     strategy:
       matrix:
         api-level: [29]  # Android 10
-        arch: [x86_64]    # x86_64 for emulator (faster than arm64)
+        arch: [arm64-v8a]  # ARM64 for Apple Silicon compatibility
     
     steps:
       - uses: actions/checkout@v4
@@ -71,7 +71,7 @@ jobs:
       
       - uses: dtolnay/rust-toolchain@stable
         with:
-          targets: x86_64-linux-android
+          targets: aarch64-linux-android
       
       - name: Install cargo-ndk
         run: cargo install cargo-ndk
@@ -92,22 +92,22 @@ jobs:
           NDK_HOME=$ANDROID_NDK_HOME
           TOOLCHAIN=$NDK_HOME/toolchains/llvm/prebuilt/darwin-x86_64/bin
           
-          # Create symlinks for x86_64 target
-          ln -sf $TOOLCHAIN/x86_64-linux-android30-clang $TOOLCHAIN/x86_64-linux-android-clang
-          ln -sf $TOOLCHAIN/x86_64-linux-android30-clang++ $TOOLCHAIN/x86_64-linux-android-clang++
-          ln -sf $TOOLCHAIN/llvm-ar $TOOLCHAIN/x86_64-linux-android-ar
-          ln -sf $TOOLCHAIN/llvm-ranlib $TOOLCHAIN/x86_64-linux-android-ranlib
+          # Create symlinks for aarch64 target
+          ln -sf $TOOLCHAIN/aarch64-linux-android30-clang $TOOLCHAIN/aarch64-linux-android-clang
+          ln -sf $TOOLCHAIN/aarch64-linux-android30-clang++ $TOOLCHAIN/aarch64-linux-android-clang++
+          ln -sf $TOOLCHAIN/llvm-ar $TOOLCHAIN/aarch64-linux-android-ar
+          ln -sf $TOOLCHAIN/llvm-ranlib $TOOLCHAIN/aarch64-linux-android-ranlib
       
       - name: Install dependencies
         run: cargo xtask install-tools
       
-      - name: Build for Android x86_64
+      - name: Build for Android ARM64
         env:
           ANDROID_NDK_HOME: ${{ env.ANDROID_NDK_HOME }}
         run: |
-          cargo ndk -t x86_64 build --package crashpad-rs-sys --release
-          cargo ndk -t x86_64 build --package crashpad-rs --release
-          cargo ndk -t x86_64 build --example crashpad_test_cli --release
+          cargo ndk -t arm64-v8a build --package crashpad-rs-sys --release
+          cargo ndk -t arm64-v8a build --package crashpad-rs --release
+          cargo ndk -t arm64-v8a build --example crashpad_test_cli --release
       
       - name: AVD cache
         uses: actions/cache@v4
@@ -147,8 +147,8 @@ jobs:
             adb shell mkdir -p /data/local/tmp/crashpad_metrics
             
             # Push the test binary and handler to emulator
-            adb push target/x86_64-linux-android/release/examples/crashpad_test_cli /data/local/tmp/
-            adb push target/x86_64-linux-android/release/libcrashpad_handler.so /data/local/tmp/
+            adb push target/aarch64-linux-android/release/examples/crashpad_test_cli /data/local/tmp/
+            adb push target/aarch64-linux-android/release/libcrashpad_handler.so /data/local/tmp/
             adb shell chmod +x /data/local/tmp/crashpad_test_cli
             adb shell chmod +x /data/local/tmp/libcrashpad_handler.so
             
