@@ -11,6 +11,7 @@ concurrency:
 
 jobs:
   linux:
+    if: github.actor != 'release-please[bot]'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

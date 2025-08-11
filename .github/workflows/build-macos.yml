@@ -11,6 +11,7 @@ concurrency:
 
 jobs:
   macos:
+    if: github.actor != 'release-please[bot]'
     runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
