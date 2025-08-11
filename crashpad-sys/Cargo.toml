@@ -1,5 +1,5 @@
 [package]
-name = "crashpad-sys"
+name = "crashpad-rs-sys"
 version = { workspace = true }
 authors = { workspace = true }
 edition = { workspace = true }
@@ -8,7 +8,7 @@ repository = { workspace = true }
 rust-version = { workspace = true }
 description = "Low-level FFI bindings to Google Crashpad - A crash-reporting system"
 homepage = { workspace = true }
-documentation = "https://docs.rs/crashpad-sys"
+documentation = "https://docs.rs/crashpad-rs-sys"
 readme = { workspace = true }
 keywords = { workspace = true }
 categories = { workspace = true }

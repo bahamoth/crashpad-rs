@@ -366,7 +366,7 @@ dependencies = [
 name = "crashpad"
 version = "0.1.0"
 dependencies = [
- "crashpad-sys",
+ "crashpad-rs-sys",
  "libc",
  "minidump",
  "minidump-processor",
@@ -375,7 +375,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "crashpad-sys"
+name = "crashpad-rs-sys"
 version = "0.1.0"
 dependencies = [
  "bindgen",

@@ -2,6 +2,16 @@
 
 Rust bindings for Google Crashpad crash reporting system.
 
+## Project Structure
+
+| Directory | Package Name | Description |
+|-----------|-------------|------------|
+| `crashpad-sys/` | `crashpad-rs-sys` | Low-level FFI bindings to Crashpad C++ library |
+| `crashpad/` | `crashpad` | Safe Rust wrapper API |
+| `xtask/` | - | Development automation (not published) |
+
+**Note**: The `crashpad-sys` directory is published as `crashpad-rs-sys` to avoid naming conflicts on crates.io.
+
 ## Features
 
 - **Cross-platform**: macOS, Linux, Windows, iOS, Android
@@ -230,11 +240,7 @@ The `crashpad_handler` executable must be available at runtime. Common approache
 
 ## License
 
-Licensed under either of:
-- Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE))
-- MIT license ([LICENSE-MIT](LICENSE-MIT))
-
-at your option.
+Licensed under MIT license ([LICENSE](LICENSE)).
 
 ## Contributing
 

@@ -31,6 +31,7 @@ Claude Code guidance for crashpad-rs - Rust bindings for Google Crashpad.
 ### 3. During Implementation
 
 #### FFI Work (crashpad-sys)
+- **PACKAGE NAME**: Published as `crashpad-rs-sys` on crates.io
 - **FOLLOW**: bindgen patterns in `build.rs`
 - **UPDATE**: `wrapper.h` for new C API declarations
 - **IMPLEMENT**: C++ bridge in `crashpad_wrapper.cc`
@@ -38,6 +39,7 @@ Claude Code guidance for crashpad-rs - Rust bindings for Google Crashpad.
 - **DOCUMENT**: Safety requirements in comments
 
 #### Safe Wrapper (crashpad)
+- **DEPENDS ON**: `crashpad-rs-sys` (not `crashpad-sys`)
 - **WRAP**: Unsafe FFI calls with safe Rust API
 - **USE**: `thiserror` for error types (workspace dependency)
 - **CHECK**: Null pointers before dereferencing
@@ -90,7 +92,7 @@ Date: {YYYY-MM-DD}
 
 ## Build Validation
 - [ ] Clean native artifacts: `make clean`
-- [ ] Rebuild: `cargo build --package crashpad-sys`
+- [ ] Rebuild: `cargo build --package crashpad-rs-sys`
 - [ ] Build wrapper: `cargo build --package crashpad`
 - [ ] Test handler: `cargo run --example crashpad_test_cli`
 
@@ -115,8 +117,13 @@ Date: {YYYY-MM-DD}
 
 ## 🏗️ Build System Notes
 
+### Package Naming
+- **Directory**: `crashpad-sys/` → **Package**: `crashpad-rs-sys`
+- **Directory**: `crashpad/` → **Package**: `crashpad`
+- This avoids conflicts with existing crates.io packages
+
 ### Automatic Dependency Management
-- Crashpad and dependencies managed as Git submodules in `third_party/`
+- Crashpad and dependencies managed as Git submodules in `crashpad-sys/third_party/`
 - No Python or depot_tools required
 - Submodules tracked in repository for reproducible builds
 
@@ -187,7 +194,7 @@ Date: {YYYY-MM-DD}
 ### Essential Commands
 ```bash
 # Standard build
-cargo build --package crashpad-sys
+cargo build --package crashpad-rs-sys
 cargo build --package crashpad
 
 # Clean and rebuild (for link errors)
@@ -205,6 +212,11 @@ cargo clippy --all-targets --all-features -- -D warnings
 # Create distribution
 cargo xtask dist
 
+# Package for crates.io (maintainers)
+cargo xtask symlink  # Required before packaging
+cargo package -p crashpad-rs-sys
+cargo package -p crashpad
+
 # Run example
 cargo run --example crashpad_test_cli
 ```
@@ -212,7 +224,7 @@ cargo run --example crashpad_test_cli
 ### Cross-Compilation
 ```bash
 # Android (with cargo-ndk)
-cargo ndk -t arm64-v8a build --package crashpad-sys
+cargo ndk -t arm64-v8a build --package crashpad-rs-sys
 
 # iOS
 cargo build --target aarch64-apple-ios
