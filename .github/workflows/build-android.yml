@@ -159,10 +159,8 @@ jobs:
             # Push test binary
             adb push target/x86_64-linux-android/release/examples/crashpad_test_cli /data/local/tmp/
             
-            # Push handler (it's built as .so for Android)
-            adb push target/x86_64-linux-android/release/libcrashpad_handler.so /data/local/tmp/ || \
-              adb push target/x86_64-linux-android/release/crashpad_handler /data/local/tmp/libcrashpad_handler.so || \
-              echo "WARNING: Handler not found"
+            # Push handler (it's an executable built as .so for Android)
+            adb push target/x86_64-linux-android/release/libcrashpad_handler.so /data/local/tmp/
             
             # Push libc++_shared.so (required for NDK apps)
             # API 29 is our minimum SDK version
