@@ -8,6 +8,11 @@ use std::io::{self, Read};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+/// Tool versions from Crashpad's DEPS file
+/// Update these when updating Crashpad submodule
+const GN_VERSION: &str = "git_revision:5e19d2fb166fbd4f6f32147fbb2f497091a54ad8";
+const NINJA_VERSION: &str = "version:2@1.8.2.chromium.3";
+
 /// Manages build tool binaries (GN and Ninja)
 pub struct BinaryToolManager {
     cache_dir: PathBuf,
@@ -37,31 +42,26 @@ impl Platform {
         }
     }
 
-    fn gn_download_url(&self) -> &str {
-        // Using specific CIPD instance IDs for GN
-        // These are from Crashpad's DEPS (gn_version: git_revision:5e19d2fb166fbd4f6f32147fbb2f497091a54ad8)
-        match self {
-            Platform::MacX64 => "https://chrome-infra-packages.appspot.com/dl/gn/gn/mac-amd64/+/vUhaNJTIU0GlkkHoMHzcvB0kS1hHitMx7elkSb6uF8oC",
-            Platform::MacArm64 => "https://chrome-infra-packages.appspot.com/dl/gn/gn/mac-arm64/+/vUhaNJTIU0GlkkHoMHzcvB0kS1hHitMx7elkSb6uF8oC",
-            Platform::LinuxX64 => "https://chrome-infra-packages.appspot.com/dl/gn/gn/linux-amd64/+/0LIrFnUqb6qHI6lk8wUWnw4_j74ApIJmVqKJlu_dVxgC",
-            Platform::WinX64 => "https://chrome-infra-packages.appspot.com/dl/gn/gn/windows-amd64/+/vJIJHSiQ0MQ2ZfPNHJlNnE55J2F77lJqHZCn9dLn0Z8C",
-        }
+    fn gn_download_url(&self) -> String {
+        let platform = match self {
+            Platform::MacX64 => "mac-amd64",
+            Platform::MacArm64 => "mac-arm64",
+            Platform::LinuxX64 => "linux-amd64",
+            Platform::WinX64 => "windows-amd64",
+        };
+        format!("https://chrome-infra-packages.appspot.com/dl/gn/gn/{platform}/+/{GN_VERSION}")
     }
 
-    fn ninja_download_url(&self) -> &str {
-        // Ninja releases from GitHub
-        // Version: 1.11.1
-        match self {
-            Platform::MacX64 | Platform::MacArm64 => {
-                "https://github.com/ninja-build/ninja/releases/download/v1.11.1/ninja-mac.zip"
-            }
-            Platform::LinuxX64 => {
-                "https://github.com/ninja-build/ninja/releases/download/v1.11.1/ninja-linux.zip"
-            }
-            Platform::WinX64 => {
-                "https://github.com/ninja-build/ninja/releases/download/v1.11.1/ninja-win.zip"
-            }
-        }
+    fn ninja_download_url(&self) -> String {
+        let platform = match self {
+            Platform::MacX64 => "mac-amd64",
+            Platform::MacArm64 => "mac-arm64",
+            Platform::LinuxX64 => "linux-amd64",
+            Platform::WinX64 => "windows-amd64",
+        };
+        format!(
+            "https://chrome-infra-packages.appspot.com/dl/infra/3pp/tools/ninja/{platform}/+/{NINJA_VERSION}"
+        )
     }
 
     fn executable_suffix(&self) -> &str {
@@ -164,7 +164,7 @@ impl BinaryToolManager {
         let temp_zip = self.cache_dir.join("gn_temp.zip");
 
         // Download using ureq
-        let response = ureq::get(url).call()?;
+        let response = ureq::get(&url).call()?;
         let mut reader = response.into_reader();
         let mut buffer = Vec::new();
         reader.read_to_end(&mut buffer)?;
@@ -243,7 +243,7 @@ impl BinaryToolManager {
         let temp_zip = self.cache_dir.join("ninja_temp.zip");
 
         // Download using ureq
-        let response = ureq::get(url).call()?;
+        let response = ureq::get(&url).call()?;
         let mut reader = response.into_reader();
         let mut buffer = Vec::new();
         reader.read_to_end(&mut buffer)?;

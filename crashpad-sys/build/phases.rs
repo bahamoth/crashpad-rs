@@ -24,12 +24,9 @@ impl BuildPhases {
 
     /// Phase 1: Prepare dependencies (ensure build tools are available)
     pub fn prepare(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        // Ensure crashpad submodule is initialized
-        if !self.config.crashpad_dir.exists() || !self.config.crashpad_dir.join(".git").exists() {
-            return Err(
-                "Crashpad submodule not initialized. Run: git submodule update --init --recursive"
-                    .into(),
-            );
+        // Ensure crashpad directory exists and has required files
+        if !self.config.crashpad_dir.exists() {
+            return Err("Crashpad directory not found".into());
         }
 
         // Use BinaryToolManager for GN/Ninja
@@ -497,13 +494,7 @@ impl BuildPhases {
         ];
 
         for (dep_name, subdir) in deps {
-            let target = self
-                .config
-                .manifest_dir
-                .parent()
-                .unwrap()
-                .join("third_party")
-                .join(dep_name);
+            let target = self.config.manifest_dir.join("third_party").join(dep_name);
 
             let link = self
                 .config
