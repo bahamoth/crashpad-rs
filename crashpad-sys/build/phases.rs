@@ -165,9 +165,7 @@ impl BuildPhases {
             }
 
             // Add handler executable for non-iOS platforms
-            if !self.config.target.contains("android") {
-                cmd.arg("handler:crashpad_handler");
-            }
+            cmd.arg("handler:crashpad_handler");
         }
 
         let status = cmd.status()?;
