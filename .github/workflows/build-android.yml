@@ -44,4 +44,6 @@ jobs:
         run: |
           cargo ndk -t arm64-v8a build --package crashpad-rs-sys
           cargo ndk -t arm64-v8a build --package crashpad-rs
+      - name: test
+        run: cargo nextest run
 

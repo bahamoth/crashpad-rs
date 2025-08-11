@@ -31,5 +31,6 @@ jobs:
         run: |
           cargo build -p crashpad-rs-sys --target aarch64-apple-ios
           cargo build -p crashpad-rs --target aarch64-apple-ios
-
+      - name: test
+        run: cargo nextest run
 

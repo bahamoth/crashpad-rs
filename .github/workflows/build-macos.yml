@@ -25,3 +25,5 @@ jobs:
         run: |
           cargo build --package crashpad-rs-sys
           cargo build --package crashpad-rs
+      - name: test
+        run: cargo nextest run
