@@ -4,7 +4,7 @@
 //! The Crashpad client operates within the same process.
 
 #[cfg(any(target_os = "ios", target_os = "tvos", target_os = "watchos"))]
-use crashpad::{CrashpadClient, CrashpadConfig};
+use crashpad_rs::{CrashpadClient, CrashpadConfig};
 #[cfg(any(target_os = "ios", target_os = "tvos", target_os = "watchos"))]
 use std::collections::HashMap;
 

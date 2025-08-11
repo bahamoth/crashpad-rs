@@ -17,7 +17,7 @@ pub extern "C" fn pthread_atfork(
     0
 }
 
-use crashpad::{CrashpadClient, CrashpadConfig};
+use crashpad_rs::{CrashpadClient, CrashpadConfig};
 use std::collections::HashMap;
 use std::env;
 

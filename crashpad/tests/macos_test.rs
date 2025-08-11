@@ -1,7 +1,7 @@
 #[cfg(target_os = "macos")]
 #[cfg(test)]
 mod macos_tests {
-    use crashpad::{CrashpadClient, Result};
+    use crashpad_rs::{CrashpadClient, Result};
 
     #[test]
     fn test_mach_service() -> Result<()> {

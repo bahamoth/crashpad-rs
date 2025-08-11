@@ -36,7 +36,7 @@ To your distribution package, placing it next to your executable.
 ## Usage in Your Application
 
 ```rust
-use crashpad::{CrashpadClient, CrashpadConfig, HandlerStrategy};
+use crashpad_rs::{CrashpadClient, CrashpadConfig, HandlerStrategy};
 use std::collections::HashMap;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {

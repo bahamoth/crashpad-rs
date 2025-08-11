@@ -1,4 +1,4 @@
-use crashpad::CrashpadClient;
+use crashpad_rs::CrashpadClient;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use tempfile::TempDir;
