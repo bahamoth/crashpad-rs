@@ -21,6 +21,9 @@ jobs:
         with:
           toolchain: 'stable'
       - uses: Swatinem/rust-cache@v2
+      - name: Install dependencies
+        run: |
+          cargo xtask install-tools
       - name: macOS Build
         run: |
           cargo build --package crashpad-rs-sys

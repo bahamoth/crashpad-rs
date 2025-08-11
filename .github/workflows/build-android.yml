@@ -38,6 +38,9 @@ jobs:
           ln -sf aarch64-linux-android21-clang aarch64-linux-android-clang
           ln -sf aarch64-linux-android21-clang++ aarch64-linux-android-clang++
           ln -sf llvm-ar aarch64-linux-android-ar
+      - name: Install dependencies
+        run: |
+          cargo xtask install-tools
       - name: Android build (arm64-v8a)
         env:
           ANDROID_NDK_HOME: ${{ steps.ndk.outputs.ndk-path }}
