@@ -21,6 +21,24 @@ fn main() {
 fn run() -> Result<(), Box<dyn std::error::Error>> {
     // Load platform configuration
     let config = BuildConfig::from_env()?;
+
+    // Check if we're in cargo package environment
+    // cargo package doesn't need actual build, just verification
+    if config
+        .manifest_dir
+        .to_string_lossy()
+        .contains("target/package/")
+    {
+        eprintln!("Detected cargo package environment, skipping Crashpad build");
+        // Create dummy bindings file for package verification
+        let bindings_path = config.bindings_path();
+        if let Some(parent) = bindings_path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        std::fs::write(bindings_path, "// Placeholder for cargo package\n")?;
+        return Ok(());
+    }
+
     let mut phases = BuildPhases::new(config);
 
     // Set up cargo rebuild triggers

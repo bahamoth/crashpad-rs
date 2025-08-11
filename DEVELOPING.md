@@ -100,13 +100,14 @@ git submodule update --init --recursive
 This project uses Git submodules to manage Crashpad and its dependencies following the exact DEPS hierarchy.
 
 ```
-third_party/
+crashpad-sys/third_party/
 ├── crashpad/           # Google Crashpad (submodule)
 ├── mini_chromium/      # Base library (submodule)
 ├── googletest/         # Test framework (submodule)
 ├── zlib/              # Compression library (submodule)
 ├── libfuzzer/         # Fuzzing library (submodule)
-└── edo/               # iOS library (submodule)
+├── edo/               # iOS library (submodule)
+└── lss/               # Linux syscalls (submodule)
 ```
 
 The build system automatically creates symlinks/junctions inside `crashpad/third_party/` to these dependencies.
@@ -139,8 +140,8 @@ cargo nextest run
 ### Native Build
 
 ```bash
-# Build the FFI layer
-cargo build --package crashpad-sys
+# Build the FFI layer (note: package name is crashpad-rs-sys)
+cargo build --package crashpad-rs-sys
 
 # Build the safe wrapper
 cargo build --package crashpad
@@ -159,7 +160,7 @@ cargo xtask dist
 make clean
 
 # Or manually:
-rm -rf target/ third_party/
+rm -rf target/ crashpad-sys/third_party/crashpad/out/
 cargo clean
 ```
 
@@ -181,7 +182,7 @@ crashpad-rs uses Git submodules to pin specific versions of native dependencies:
 
 ### Current Submodule Versions
 
-All dependency versions are managed through Git submodules in `third_party/`:
+All dependency versions are managed through Git submodules in `crashpad-sys/third_party/`:
 - crashpad
 - mini_chromium  
 - googletest
@@ -196,10 +197,10 @@ To update a specific dependency:
 
 ```bash
 # Update specific submodule to latest
-cd third_party/crashpad
+cd crashpad-sys/third_party/crashpad
 git checkout <new_commit>
-cd ../..
-git add third_party/crashpad
+cd ../../..
+git add crashpad-sys/third_party/crashpad
 git commit -m "chore: update crashpad to <new_commit>"
 
 # Or update all submodules to latest
@@ -253,9 +254,9 @@ rustup target add armv7-linux-androideabi
 rustup target add x86_64-linux-android
 
 # Build for specific architectures
-cargo ndk -t arm64-v8a build --package crashpad-sys
-cargo ndk -t armeabi-v7a build --package crashpad-sys
-cargo ndk -t x86_64 build --package crashpad-sys
+cargo ndk -t arm64-v8a build --package crashpad-rs-sys
+cargo ndk -t armeabi-v7a build --package crashpad-rs-sys
+cargo ndk -t x86_64 build --package crashpad-rs-sys
 ```
 
 ### Linux (from macOS)
@@ -472,7 +473,7 @@ cargo build --all
 
 ```bash
 # Enable verbose build output
-CRASHPAD_VERBOSE=1 cargo build --package crashpad-sys
+CRASHPAD_VERBOSE=1 cargo build --package crashpad-rs-sys
 
 # See actual compiler commands
 cargo build -vv
@@ -540,7 +541,7 @@ export ANDROID_NDK_ROOT=$ANDROID_NDK_HOME
 **Solution**: 
 1. Initialize submodules: `git submodule update --init --recursive`
 2. Clean everything and rebuild: `make clean && cargo build`
-3. Check that symlinks/junctions were created in `third_party/crashpad/third_party/`
+3. Check that symlinks/junctions were created in `crashpad-sys/third_party/crashpad/third_party/`
 
 ### Test Failures
 
@@ -570,30 +571,92 @@ iOS uses an in-process handler (no separate executable). Crashes are captured as
 
 ```
 crashpad-rs/
-├── crashpad-sys/          # Low-level FFI bindings
+├── crashpad-sys/          # Low-level FFI bindings (publishes as crashpad-rs-sys)
 │   ├── build.rs          # Build script orchestration
 │   ├── build/            # Build system modules
 │   │   ├── config.rs     # Platform configuration
 │   │   └── phases.rs     # Build phases
 │   ├── wrapper.h         # C API declarations
-│   └── crashpad_wrapper.cc # C++ bridge implementation
-├── crashpad/             # Safe Rust wrapper
+│   ├── crashpad_wrapper.cc # C++ bridge implementation
+│   └── third_party/      # Git submodules
+│       ├── crashpad/     # Crashpad source
+│       ├── mini_chromium/ # Base library
+│       ├── googletest/   # Test framework
+│       ├── zlib/         # Compression
+│       ├── libfuzzer/    # Fuzzing
+│       ├── edo/          # iOS library
+│       └── lss/          # Linux syscalls
+├── crashpad/             # Safe Rust wrapper (publishes as crashpad)
 │   ├── src/
 │   │   ├── client.rs    # CrashpadClient implementation
 │   │   ├── config.rs    # Configuration builder
 │   │   └── lib.rs       # Public API
 │   ├── examples/         # Example programs
 │   └── tests/           # Integration tests
-├── xtask/               # Development automation
-└── third_party/         # Git submodules
-    ├── crashpad/        # Crashpad source
-    ├── mini_chromium/   # Base library
-    ├── googletest/      # Test framework
-    ├── zlib/            # Compression
-    ├── libfuzzer/       # Fuzzing
-    ├── edo/             # iOS library
-    └── lss/             # Linux syscalls
+└── xtask/               # Development automation
 ```
+
+## Packaging for crates.io
+
+### Package Structure
+
+The project uses different names for directories and crates.io packages:
+
+| Directory | Package Name | Reason |
+|-----------|-------------|--------|
+| `crashpad-sys/` | `crashpad-rs-sys` | Avoids conflict with existing `crashpad-sys` crate |
+| `crashpad/` | `crashpad` | Main user-facing package |
+
+### Publishing Process
+
+1. **Prepare symlinks** (required for packaging):
+   ```bash
+   # Create symlinks for Crashpad dependencies
+   cargo xtask symlink
+   ```
+
+2. **Package the FFI bindings**:
+   ```bash
+   # Package crashpad-rs-sys (from crashpad-sys directory)
+   cargo package -p crashpad-rs-sys
+   
+   # Verify the package (optional)
+   cargo package -p crashpad-rs-sys --list
+   ```
+
+3. **Package the safe wrapper**:
+   ```bash
+   # Package crashpad
+   cargo package -p crashpad
+   ```
+
+4. **Publish to crates.io** (maintainers only):
+   ```bash
+   # Publish in dependency order
+   cargo publish -p crashpad-rs-sys
+   cargo publish -p crashpad
+   ```
+
+### How Packaging Works
+
+The build system handles cargo package specially:
+
+1. **Symlink Creation**: Run `cargo xtask symlink` to pre-create dependency symlinks before packaging
+2. **Package Detection**: `build.rs` detects when running in `cargo package` environment
+3. **Build Skipping**: During packaging, the actual Crashpad build is skipped
+4. **Symlink Following**: cargo follows symlinks and includes actual files in the package
+
+This approach ensures the package includes all necessary source files without requiring build-time symlink creation.
+
+### Troubleshooting Package Issues
+
+#### "Source directory was modified" Error
+**Problem**: cargo package fails with verification error
+**Solution**: Run `cargo xtask symlink` before packaging
+
+#### Package Size Concerns
+The packaged crate includes Crashpad source code and dependencies (~3-4MB compressed).
+This is necessary since Crashpad must be built from source on the target system.
 
 ## Contributing
 

@@ -6,7 +6,7 @@ use std::ptr;
 use crate::{CrashpadConfig, CrashpadError, Result};
 
 // Import FFI bindings
-use crashpad_sys::*;
+use crashpad_rs_sys::*;
 
 /// A Crashpad client that can be used to capture and report crashes.
 pub struct CrashpadClient {
