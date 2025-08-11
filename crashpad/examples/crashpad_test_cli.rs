@@ -104,20 +104,26 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // The client will remain active for the lifetime of this variable
     // When it's dropped, the handler connection will be closed
 
-    // Keep the process running for a bit to demonstrate it's working
-    println!("\nPress Enter to trigger a crash, or Ctrl+C to exit safely...");
+    // Check command line arguments or environment variables
+    let args: Vec<String> = env::args().collect();
+    let should_crash = args.len() > 1 && args[1] == "crash";
+    let should_crash_env = env::var("CRASHPAD_TEST_CRASH").is_ok();
 
-    let mut input = String::new();
-    std::io::stdin().read_line(&mut input)?;
+    if should_crash || should_crash_env {
+        println!("\nTriggering crash now...");
 
-    println!("Triggering crash in 1 second...");
-    std::thread::sleep(std::time::Duration::from_secs(1));
-
-    // Trigger an actual crash
-    unsafe {
-        // Null pointer dereference
-        let null_ptr: *const i32 = std::ptr::null();
-        println!("About to crash with value: {}", *null_ptr);
+        // Trigger an actual crash
+        unsafe {
+            // Null pointer dereference
+            let null_ptr: *const i32 = std::ptr::null();
+            println!("About to crash with value: {}", *null_ptr);
+        }
+    } else {
+        println!("\nCrashpad initialized successfully!");
+        println!("To trigger a crash, run with:");
+        println!("  {} crash", args[0]);
+        println!("Or set environment variable:");
+        println!("  CRASHPAD_TEST_CRASH=1 {}", args[0]);
     }
 
     Ok(())

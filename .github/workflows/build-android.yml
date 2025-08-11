@@ -47,6 +47,127 @@ jobs:
         run: |
           cargo ndk -t arm64-v8a build --package crashpad-rs-sys
           cargo ndk -t arm64-v8a build --package crashpad-rs
-      - name: test
-        run: cargo nextest run
+      
+      # Build test CLI for emulator testing
+      - name: Build test CLI
+        env:
+          ANDROID_NDK_HOME: ${{ steps.ndk.outputs.ndk-path }}
+        run: |
+          cargo ndk -t arm64-v8a build --example crashpad_test_cli --release
+          
+  # Android emulator test (runs on macOS for better performance)
+  android-emulator-test:
+    if: github.actor != 'release-please[bot]'
+    runs-on: macos-latest
+    strategy:
+      matrix:
+        api-level: [29]  # Android 10
+        arch: [x86_64]    # x86_64 for emulator (faster than arm64)
+    
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-linux-android
+      
+      - name: Install cargo-ndk
+        run: cargo install cargo-ndk
+      
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+      
+      - name: Install Android NDK
+        run: |
+          sdkmanager --install "ndk;27c"
+          echo "ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/ndk/27c" >> $GITHUB_ENV
+      
+      - name: Setup NDK symlinks
+        run: |
+          NDK_HOME=$ANDROID_NDK_HOME
+          TOOLCHAIN=$NDK_HOME/toolchains/llvm/prebuilt/darwin-x86_64/bin
+          
+          # Create symlinks for x86_64 target
+          ln -sf $TOOLCHAIN/x86_64-linux-android30-clang $TOOLCHAIN/x86_64-linux-android-clang
+          ln -sf $TOOLCHAIN/x86_64-linux-android30-clang++ $TOOLCHAIN/x86_64-linux-android-clang++
+          ln -sf $TOOLCHAIN/llvm-ar $TOOLCHAIN/x86_64-linux-android-ar
+          ln -sf $TOOLCHAIN/llvm-ranlib $TOOLCHAIN/x86_64-linux-android-ranlib
+      
+      - name: Install dependencies
+        run: cargo xtask install-tools
+      
+      - name: Build for Android x86_64
+        env:
+          ANDROID_NDK_HOME: ${{ env.ANDROID_NDK_HOME }}
+        run: |
+          cargo ndk -t x86_64 build --package crashpad-rs-sys --release
+          cargo ndk -t x86_64 build --package crashpad-rs --release
+          cargo ndk -t x86_64 build --example crashpad_test_cli --release
+      
+      - name: AVD cache
+        uses: actions/cache@v4
+        id: avd-cache
+        with:
+          path: |
+            ~/.android/avd/*
+            ~/.android/adb*
+          key: avd-${{ matrix.api-level }}-${{ matrix.arch }}
+      
+      - name: Create AVD and generate snapshot
+        if: steps.avd-cache.outputs.cache-hit != 'true'
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: ${{ matrix.api-level }}
+          arch: ${{ matrix.arch }}
+          force-avd-creation: false
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
+          disable-animations: true
+          script: echo "Generated AVD snapshot for caching."
+      
+      - name: Run tests on Android Emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: ${{ matrix.api-level }}
+          arch: ${{ matrix.arch }}
+          force-avd-creation: false
+          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
+          disable-animations: true
+          script: |
+            # Wait for emulator to be ready
+            adb wait-for-device
+            adb shell getprop sys.boot_completed | grep 1
+            
+            # Create test directories
+            adb shell mkdir -p /data/local/tmp/crashpad_database
+            adb shell mkdir -p /data/local/tmp/crashpad_metrics
+            
+            # Push the test binary and handler to emulator
+            adb push target/x86_64-linux-android/release/examples/crashpad_test_cli /data/local/tmp/
+            adb push target/x86_64-linux-android/release/libcrashpad_handler.so /data/local/tmp/
+            adb shell chmod +x /data/local/tmp/crashpad_test_cli
+            adb shell chmod +x /data/local/tmp/libcrashpad_handler.so
+            
+            # Test 1: Normal operation (initialization test)
+            echo "=== Test 1: Initialization test ==="
+            adb shell "cd /data/local/tmp && ./crashpad_test_cli"
+            
+            # Test 2: Crash test (expected to crash)
+            echo "=== Test 2: Crash test ==="
+            adb shell "cd /data/local/tmp && ./crashpad_test_cli crash" || true
+            
+            # Wait for crash to be processed
+            sleep 3
+            
+            # Test 3: Verify crash dump was created
+            echo "=== Test 3: Verifying crash dump ==="
+            DUMP_COUNT=$(adb shell "ls /data/local/tmp/crashpad_database/pending/*.dmp 2>/dev/null | wc -l")
+            if [ "$DUMP_COUNT" -gt "0" ]; then
+              echo "✓ Found $DUMP_COUNT crash dump(s)"
+              adb shell "ls -la /data/local/tmp/crashpad_database/pending/"
+            else
+              echo "✗ No crash dumps found"
+              exit 1
+            fi
 

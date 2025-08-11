@@ -58,51 +58,27 @@ fn main() {
     client.process_intermediate_dumps();
     println!("✓ Processed intermediate dumps");
 
-    println!("\nTest scenarios:");
-    println!("1. Normal operation test");
-    println!("2. Null pointer dereference");
-    println!("3. Abort signal");
-    println!("4. Exit normally");
-    println!("5. Check crash dump status");
+    // Check command line arguments or environment variables for CI mode
+    let args: Vec<String> = std::env::args().collect();
+    let should_crash = args.len() > 1 && args[1] == "crash";
+    let should_crash_env = std::env::var("CRASHPAD_TEST_CRASH").is_ok();
 
-    // Actually trigger a crash for testing
-    println!("\nTriggering crash for testing...");
-    let choice = "2"; // Null pointer dereference
+    if should_crash || should_crash_env {
+        println!("\nTriggering crash now...");
 
-    match choice {
-        "1" => {
-            println!("Running normal operation test...");
-            // Simulate some work
-            for i in 0..5 {
-                println!("Working... {}/5", i + 1);
-                std::thread::sleep(std::time::Duration::from_secs(1));
-            }
-            println!("Normal operation completed successfully!");
+        // Trigger an actual crash
+        unsafe {
+            // Null pointer dereference
+            let null_ptr: *const i32 = std::ptr::null();
+            println!("About to crash with value: {}", *null_ptr);
         }
-        "2" => {
-            println!("Triggering null pointer dereference...");
-            std::thread::sleep(std::time::Duration::from_secs(1));
-            unsafe {
-                let null_ptr: *const i32 = std::ptr::null();
-                println!("Value at null: {}", *null_ptr); // This will crash
-            }
-        }
-        "3" => {
-            println!("Triggering abort...");
-            std::thread::sleep(std::time::Duration::from_secs(1));
-            std::process::abort();
-        }
-        "4" => {
-            println!("Exiting normally...");
-        }
-        "5" => {
-            println!("Checking crash dump directories...");
-            println!("(ProcessIntermediateDumps was called during initialization)");
-            println!("Any intermediate dumps should now be converted to minidumps.");
-        }
-        _ => {
-            println!("Invalid choice, exiting...");
-        }
+    } else {
+        println!("\niOS Crashpad initialized successfully!");
+        println!("In-process handler is active and monitoring for crashes.");
+        println!("To trigger a crash, run with:");
+        println!("  {} crash", args[0]);
+        println!("Or set environment variable:");
+        println!("  CRASHPAD_TEST_CRASH=1 {}", args[0]);
     }
 
     println!("Test completed (you shouldn't see this after a crash)");
