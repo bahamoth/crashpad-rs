@@ -7,10 +7,12 @@ Rust bindings for Google Crashpad crash reporting system.
 | Directory | Package Name | Description |
 |-----------|-------------|------------|
 | `crashpad-sys/` | `crashpad-rs-sys` | Low-level FFI bindings to Crashpad C++ library |
-| `crashpad/` | `crashpad` | Safe Rust wrapper API |
+| `crashpad/` | `crashpad-rs` | Safe Rust wrapper API |
 | `xtask/` | - | Development automation (not published) |
 
-**Note**: The `crashpad-sys` directory is published as `crashpad-rs-sys` to avoid naming conflicts on crates.io.
+**Note**: The directories are published with different names to avoid conflicts on crates.io:
+- `crashpad-sys/` → `crashpad-rs-sys`
+- `crashpad/` → `crashpad-rs`
 
 ## Features
 
@@ -26,13 +28,13 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-crashpad = "0.1"
+crashpad-rs = "0.1"
 ```
 
 ## Quick Start
 
 ```rust
-use crashpad::{CrashpadClient, CrashpadConfig};
+use crashpad_rs::{CrashpadClient, CrashpadConfig};
 use std::collections::HashMap;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {

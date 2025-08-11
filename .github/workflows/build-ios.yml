@@ -29,6 +29,6 @@ jobs:
       - name: iOS Build (aarch64)
         run: |
           cargo build -p crashpad-rs-sys --target aarch64-apple-ios
-          cargo build -p crashpad --target aarch64-apple-ios
+          cargo build -p crashpad-rs --target aarch64-apple-ios
 
 

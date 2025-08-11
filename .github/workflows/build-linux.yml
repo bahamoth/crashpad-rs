@@ -27,4 +27,4 @@ jobs:
       - name: linux Build
         run: |
           cargo build --package crashpad-rs-sys
-          cargo build --package crashpad
+          cargo build --package crashpad-rs

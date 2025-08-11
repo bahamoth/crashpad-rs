@@ -122,7 +122,7 @@ fn dist(sh: &Shell, output_dir: &Path) -> Result<()> {
 
     // Copy Rust libraries
     let target_dir = workspace_root.join("target/release");
-    let lib_files = ["libcrashpad.rlib", "libcrashpad_rs_sys.rlib"];
+    let lib_files = ["libcrashpad_rs.rlib", "libcrashpad_rs_sys.rlib"];
 
     for lib in &lib_files {
         let src = target_dir.join(lib);

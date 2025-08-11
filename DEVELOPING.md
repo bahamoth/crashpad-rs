@@ -144,7 +144,7 @@ cargo nextest run
 cargo build --package crashpad-rs-sys
 
 # Build the safe wrapper
-cargo build --package crashpad
+cargo build --package crashpad-rs
 
 # Build everything in release mode
 cargo build --release
@@ -293,7 +293,7 @@ We use cargo-nextest for integration tests because Crashpad's out-of-process han
 ```bash
 # Unit tests only (in src/ files)
 cargo test --lib
-cargo test --lib -p crashpad  # Specific package
+cargo test --lib -p crashpad-rs  # Specific package
 
 # Integration tests only (in tests/ directory)
 cargo nextest run --test '*'
@@ -302,7 +302,7 @@ cargo nextest run --test macos_test  # Platform-specific tests
 
 # All tests
 cargo nextest run
-cargo nextest run -p crashpad  # Specific package
+cargo nextest run -p crashpad-rs  # Specific package
 
 # With verbose output
 cargo nextest run --verbose
@@ -386,7 +386,7 @@ adb wait-for-device
 adb shell getprop sys.boot_completed  # Should return "1" when ready
 
 # 8. Build with cargo-ndk
-cargo ndk -t arm64-v8a build --package crashpad --example crashpad_test_cli
+cargo ndk -t arm64-v8a build --package crashpad-rs --example crashpad_test_cli
 
 # 9. Push executable AND handler to emulator/device
 # Note: Handler is renamed to .so extension for APK distribution (not actually a shared library)
@@ -605,7 +605,7 @@ The project uses different names for directories and crates.io packages:
 | Directory | Package Name | Reason |
 |-----------|-------------|--------|
 | `crashpad-sys/` | `crashpad-rs-sys` | Avoids conflict with existing `crashpad-sys` crate |
-| `crashpad/` | `crashpad` | Main user-facing package |
+| `crashpad/` | `crashpad-rs` | Consistent naming with FFI package |
 
 ### Publishing Process
 
@@ -626,15 +626,15 @@ The project uses different names for directories and crates.io packages:
 
 3. **Package the safe wrapper**:
    ```bash
-   # Package crashpad
-   cargo package -p crashpad
+   # Package crashpad-rs
+   cargo package -p crashpad-rs
    ```
 
 4. **Publish to crates.io** (maintainers only):
    ```bash
    # Publish in dependency order
    cargo publish -p crashpad-rs-sys
-   cargo publish -p crashpad
+   cargo publish -p crashpad-rs
    ```
 
 ### How Packaging Works
