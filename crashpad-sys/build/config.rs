@@ -41,11 +41,7 @@ impl BuildConfig {
         let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR")?);
 
         // Set up common paths
-        let third_party = manifest_dir
-            .parent()
-            .ok_or("Failed to get parent directory")?
-            .join("third_party");
-
+        let third_party = manifest_dir.join("third_party");
         let crashpad_dir = third_party.join("crashpad");
 
         let mut config = Self {
