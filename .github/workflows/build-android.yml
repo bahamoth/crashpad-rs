@@ -58,7 +58,7 @@ jobs:
   # Android emulator test (runs on macOS for better performance)
   android-emulator-test:
     if: github.actor != 'release-please[bot]'
-    runs-on: macos-latest
+    runs-on: macos-13  # Use Intel-based runner for x86_64 emulator
     strategy:
       matrix:
         api-level: [29]  # Android 10
