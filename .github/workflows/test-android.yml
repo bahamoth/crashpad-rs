@@ -147,62 +147,26 @@ jobs:
           emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           disable-animations: true
           script: |
-            bash -ex <<'SCRIPT'
-            # Wait for emulator to be ready
+            set -ex
             adb wait-for-device
             adb shell getprop sys.boot_completed | grep 1
-            
-            # Setup test environment
             adb shell mkdir -p /data/local/tmp/crashpad_database
             adb shell mkdir -p /data/local/tmp/crashpad_metrics
-            
-            # Push test binary
             adb push target/x86_64-linux-android/release/examples/crashpad_test_cli /data/local/tmp/
-            
-            # Push handler (it's an executable built as .so for Android)
             adb push target/x86_64-linux-android/release/libcrashpad_handler.so /data/local/tmp/
-            
-            # Push libc++_shared.so (required for NDK apps)
-            # API 29 is our minimum SDK version
-            LIBCXX="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/x86_64-linux-android/29/libc++_shared.so"
-            if [ -f "$LIBCXX" ]; then
-              adb push "$LIBCXX" /data/local/tmp/
-            else
-              # Try finding it anywhere in NDK
-              LIBCXX=$(find $ANDROID_NDK_HOME -name "libc++_shared.so" | grep x86_64 | head -1)
-              if [ -n "$LIBCXX" ]; then
-                adb push "$LIBCXX" /data/local/tmp/
-              else
-                echo "ERROR: Cannot find libc++_shared.so"
-                exit 1
-              fi
-            fi
-            
-            # Set permissions
+            LIBCXX=$(find $ANDROID_NDK_HOME -path "*/x86_64-linux-android/libc++_shared.so" | head -1) && [ -n "$LIBCXX" ] && adb push "$LIBCXX" /data/local/tmp/ || (echo "ERROR: Cannot find libc++_shared.so" && exit 1)
             adb shell chmod +x /data/local/tmp/crashpad_test_cli
             adb shell chmod +x /data/local/tmp/libcrashpad_handler.so
-            
-            # Run tests
             echo "=== Test 1: Basic initialization ==="
             adb shell "cd /data/local/tmp && LD_LIBRARY_PATH=/data/local/tmp ./crashpad_test_cli"
-            
             echo "=== Test 2: Crash handling ==="
             adb shell "cd /data/local/tmp && LD_LIBRARY_PATH=/data/local/tmp ./crashpad_test_cli crash" || true
-            
-            # Verify crash dump was created
             sleep 2
             echo "=== Test 3: Checking for crash dumps ==="
             adb shell ls -la /data/local/tmp/crashpad_database/ || true
-            
             DUMP_COUNT=$(adb shell "find /data/local/tmp/crashpad_database -name '*.dmp' 2>/dev/null | wc -l" | tr -d '\r\n')
             echo "Found $DUMP_COUNT crash dump file(s)"
-            
-            if [ "$DUMP_COUNT" = "0" ]; then
-              echo "Warning: No crash dumps found"
-            else  
-              echo "✓ Test passed - crash dump generated"
-            fi
-            SCRIPT
+            [ "$DUMP_COUNT" = "0" ] && echo "Warning: No crash dumps found" || echo "✓ Test passed - crash dump generated"
       
       - name: Generate Test Summary
         if: always()
