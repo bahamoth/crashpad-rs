@@ -111,7 +111,7 @@ fn dist(sh: &Shell, output_dir: &Path) -> Result<()> {
 
     if !handler_path.exists() {
         anyhow::bail!(
-            "crashpad_handler not found at: {}\nMake sure to build crashpad-sys first",
+            "crashpad_handler not found at: {}\nMake sure to build crashpad-rs-sys first",
             handler_path.display()
         );
     }
@@ -466,7 +466,7 @@ fn create_symlinks(sh: &Shell) -> Result<()> {
     }
 
     println!("✅ Symlinks created successfully");
-    println!("📦 You can now run: cargo package --package crashpad-sys");
+    println!("📦 You can now run: cargo package --package crashpad-rs-sys");
 
     Ok(())
 }

@@ -41,6 +41,6 @@ jobs:
         env:
           ANDROID_NDK_HOME: ${{ steps.ndk.outputs.ndk-path }}
         run: |
-          cargo ndk -t arm64-v8a build --package crashpad-sys
+          cargo ndk -t arm64-v8a build --package crashpad-rs-sys
           cargo ndk -t arm64-v8a build --package crashpad
 

@@ -22,5 +22,5 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: macOS Build
         run: |
-          cargo build --package crashpad-sys
+          cargo build --package crashpad-rs-sys
           cargo build --package crashpad
