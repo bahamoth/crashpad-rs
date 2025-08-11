@@ -147,66 +147,64 @@ jobs:
           emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           disable-animations: true
           script: |
-            set -e
+            bash -ex <<'SCRIPT'
             # Wait for emulator to be ready
             adb wait-for-device
             adb shell getprop sys.boot_completed | grep 1
             
-            # Create test directories
+            # Setup test environment
             adb shell mkdir -p /data/local/tmp/crashpad_database
             adb shell mkdir -p /data/local/tmp/crashpad_metrics
             
-            # Push the test binary, handler, and required libraries to emulator
+            # Push test binary
             adb push target/x86_64-linux-android/release/examples/crashpad_test_cli /data/local/tmp/
             
-            # Find the handler (could be in different locations)
-            HANDLER_SO=$(find target/x86_64-linux-android/release -name "libcrashpad_handler.so" -o -name "crashpad_handler" | head -1)
-            [ -z "$HANDLER_SO" ] && HANDLER_SO=$(find target/x86_64-linux-android/release/build -name "libcrashpad_handler.so" 2>/dev/null | head -1)
+            # Push handler (it's built as .so for Android)
+            adb push target/x86_64-linux-android/release/libcrashpad_handler.so /data/local/tmp/ || \
+              adb push target/x86_64-linux-android/release/crashpad_handler /data/local/tmp/libcrashpad_handler.so || \
+              echo "WARNING: Handler not found"
             
-            if [ -n "$HANDLER_SO" ]; then echo "Found handler at: $HANDLER_SO"; adb push "$HANDLER_SO" /data/local/tmp/libcrashpad_handler.so; else echo "WARNING: Handler not found, will try to proceed anyway"; fi
+            # Push libc++_shared.so (required for NDK apps)
+            # API 29 is our minimum SDK version
+            LIBCXX="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/x86_64-linux-android/29/libc++_shared.so"
+            if [ -f "$LIBCXX" ]; then
+              adb push "$LIBCXX" /data/local/tmp/
+            else
+              # Try finding it anywhere in NDK
+              LIBCXX=$(find $ANDROID_NDK_HOME -name "libc++_shared.so" | grep x86_64 | head -1)
+              if [ -n "$LIBCXX" ]; then
+                adb push "$LIBCXX" /data/local/tmp/
+              else
+                echo "ERROR: Cannot find libc++_shared.so"
+                exit 1
+              fi
+            fi
             
-            # Find and push libc++_shared.so from NDK
-            echo "Searching for libc++_shared.so in NDK..."
-            
-            # NDK 26 has a specific structure for libc++_shared.so
-            # Try different API levels (29 is our minimum)
-            for API in 29 30 31 32 33 34; do LIBCXX="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/x86_64-linux-android/$API/libc++_shared.so"; [ -f "$LIBCXX" ] && echo "Found libc++_shared.so at: $LIBCXX (API $API)" && break; done
-            
-            # If not found with API level, try without
-            [ ! -f "$LIBCXX" ] && LIBCXX="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/x86_64-linux-android/libc++_shared.so"
-            
-            # Last resort - find any x86_64 version
-            [ ! -f "$LIBCXX" ] && echo "Searching for any x86_64 libc++_shared.so..." && LIBCXX=$(find $ANDROID_NDK_HOME -path "*/x86_64-linux-android*" -name "libc++_shared.so" -type f | head -1)
-            
-            if [ -f "$LIBCXX" ]; then echo "Pushing libc++_shared.so from: $LIBCXX"; adb push "$LIBCXX" /data/local/tmp/; adb shell ls -la /data/local/tmp/libc++_shared.so; else echo "ERROR: Could not find libc++_shared.so for x86_64"; echo "NDK structure:"; ls -la $ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/ || true; exit 1; fi
-            
+            # Set permissions
             adb shell chmod +x /data/local/tmp/crashpad_test_cli
             adb shell chmod +x /data/local/tmp/libcrashpad_handler.so
             
-            # Set LD_LIBRARY_PATH for the tests
-            export TEST_ENV="LD_LIBRARY_PATH=/data/local/tmp"
-            
-            # Test 1: Normal operation (initialization test)
-            echo "=== Test 1: Initialization test ==="
+            # Run tests
+            echo "=== Test 1: Basic initialization ==="
             adb shell "cd /data/local/tmp && LD_LIBRARY_PATH=/data/local/tmp ./crashpad_test_cli"
             
-            # Test 2: Crash test (expected to crash)
-            echo "=== Test 2: Crash test ==="
+            echo "=== Test 2: Crash handling ==="
             adb shell "cd /data/local/tmp && LD_LIBRARY_PATH=/data/local/tmp ./crashpad_test_cli crash" || true
             
-            # Wait for crash to be processed
-            sleep 3
+            # Verify crash dump was created
+            sleep 2
+            echo "=== Test 3: Checking for crash dumps ==="
+            adb shell ls -la /data/local/tmp/crashpad_database/ || true
             
-            # Test 3: Verify crash dump was created
-            echo "=== Test 3: Verifying crash dump ==="
-            adb shell "ls -la /data/local/tmp/crashpad_database/" || echo "Database directory not found"
-            adb shell "ls -la /data/local/tmp/crashpad_database/pending/" || echo "No pending dumps"
-            
-            # Check if any dump files exist
             DUMP_COUNT=$(adb shell "find /data/local/tmp/crashpad_database -name '*.dmp' 2>/dev/null | wc -l" | tr -d '\r\n')
             echo "Found $DUMP_COUNT crash dump file(s)"
             
-            if [ "$DUMP_COUNT" = "0" ]; then echo "Warning: No crash dumps found, but handler may have issues"; else echo "✓ Crash dumps created successfully"; fi
+            if [ "$DUMP_COUNT" = "0" ]; then
+              echo "Warning: No crash dumps found"
+            else  
+              echo "✓ Test passed - crash dump generated"
+            fi
+            SCRIPT
       
       - name: Generate Test Summary
         if: always()
