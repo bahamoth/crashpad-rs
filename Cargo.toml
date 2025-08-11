@@ -3,7 +3,7 @@ members = ["crashpad-sys", "crashpad", "xtask"]
 resolver = "2"
 
 [workspace.package]
-version = "0.1.0"
+version = "0.1.0" # x-release-please-version
 authors = ["bahamoth <bahamoth@naver.com>"]
 edition = "2021"
 license = "MIT"
