@@ -28,7 +28,7 @@ jobs:
           rustup target add aarch64-apple-ios
       - name: iOS Build (aarch64)
         run: |
-          cargo build -p crashpad-sys --target aarch64-apple-ios
+          cargo build -p crashpad-rs-sys --target aarch64-apple-ios
           cargo build -p crashpad --target aarch64-apple-ios
 
 

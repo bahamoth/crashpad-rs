@@ -29,10 +29,10 @@ HANDLER_NAME := crashpad_handler
 DIST_DIR := dist
 
 build:
-	cargo build --package crashpad-sys
+	cargo build --package crashpad-rs-sys
 
 build-release:
-	cargo build --release --package crashpad-sys
+	cargo build --release --package crashpad-rs-sys
 	cargo build --release --package crashpad
 
 clean:
@@ -80,7 +80,7 @@ dist: build-release
 	done; \
 	if [ $$HANDLER_FOUND -eq 0 ]; then \
 		echo "ERROR: crashpad_handler not found in any expected location"; \
-		echo "Make sure to build crashpad-sys first"; \
+		echo "Make sure to build crashpad-rs-sys first"; \
 		exit 1; \
 	fi
 	
