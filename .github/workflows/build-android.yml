@@ -81,8 +81,11 @@ jobs:
       
       - name: Install Android NDK
         run: |
-          sdkmanager --install "ndk;27c"
-          echo "ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/ndk/27c" >> $GITHUB_ENV
+          # List available NDK versions
+          sdkmanager --list | grep ndk
+          # Install latest stable NDK
+          sdkmanager --install "ndk;26.1.10909125"
+          echo "ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/ndk/26.1.10909125" >> $GITHUB_ENV
       
       - name: Setup NDK symlinks
         run: |
