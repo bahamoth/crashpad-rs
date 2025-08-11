@@ -260,7 +260,7 @@ impl CrashpadClient {
     #[cfg(any(target_os = "ios", target_os = "tvos", target_os = "watchos"))]
     pub fn process_intermediate_dumps(&self) {
         unsafe {
-            crashpad_sys::crashpad_client_process_intermediate_dumps();
+            crashpad_rs_sys::crashpad_client_process_intermediate_dumps();
         }
     }
 }

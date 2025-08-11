@@ -1,4 +1,6 @@
-use crate::{CrashpadError, Result};
+#[cfg(not(any(target_os = "ios", target_os = "tvos", target_os = "watchos")))]
+use crate::CrashpadError;
+use crate::Result;
 use std::env;
 use std::path::{Path, PathBuf};
 
