@@ -60,9 +60,9 @@ Copy this template and increment the ID:
 |----|-------|--------|----------|-------|-------|
 | T-001 | Clean up build.rs formatting and spacing | DONE   | - | - | Refactor mentioned in recent commits |
 | T-002 | Add Windows build support and testing | TODO   | - | ARCHITECTURE.md | Windows platform listed but not fully implemented |
-| T-003 | Create comprehensive FFI documentation | TODO   | - | wrapper.h | Document all exposed C++ functions |
-| T-004 | Implement Android NDK cross-compilation tests | TODO   | - | CROSS_COMPILE.md | Android support added but needs testing |
-| T-005 | Add CI/CD pipeline with GitHub Actions | DOING  | dev-codex | - | Build and test on all supported platforms |
+| T-003 | Create comprehensive FFI documentation | DONE   | - | wrapper.h | Document all exposed C++ functions |
+| T-004 | Implement Android NDK cross-compilation tests | DONE   | - | CROSS_COMPILE.md | Android support added but needs testing |
+| T-005 | Add CI/CD pipeline with GitHub Actions | DONE   | dev-codex | - | Build and test on all supported platforms |
 | T-006 | Refactor crashpad-sys build system for platform consistency | DONE   | architect-thor | build_refactor_plan.md | Unify platform-specific build configurations, fix compiler/linker mismatches |
 
 ### Task Assignment History
