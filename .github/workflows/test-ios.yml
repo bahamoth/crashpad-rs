@@ -2,8 +2,6 @@ name: Build iOS
 
 on:
   pull_request:
-  push:
-    branches: [ main ]
 
 concurrency:
   group: ios-${{ github.ref }}
@@ -40,7 +38,7 @@ jobs:
           cargo build -p crashpad-rs-sys --target aarch64-apple-ios-sim
           cargo build -p crashpad-rs --target aarch64-apple-ios-sim
           cargo build --example ios_simulator_test --target aarch64-apple-ios-sim --release
-      
+
       - name: Setup iOS Simulator
         run: |
           # List available runtimes and devices for debugging
@@ -69,7 +67,7 @@ jobs:
           
           # Wait for boot to complete
           xcrun simctl bootstatus "$SIMULATOR_ID" -b || echo "Boot status check failed, continuing..."
-      
+
       - name: Run iOS Simulator Tests
         run: |
           # Copy test binary to simulator
@@ -136,7 +134,7 @@ jobs:
           if [ "$TEST1_RESULT" = "FAIL" ] || [ "$TEST3_RESULT" = "FAIL" ]; then
             exit 1
           fi
-      
+
       - name: Save Test Results
         if: always()
         run: |
@@ -152,7 +150,7 @@ jobs:
           
           echo "Test results saved to test-results.txt"
           cat test-results.txt
-      
+
       - name: Upload Test Results
         if: always()
         uses: actions/upload-artifact@v4
@@ -160,12 +158,12 @@ jobs:
           name: test-results-ios-simulator
           path: test-results.txt
           retention-days: 7
-      
+
       - name: Shutdown Simulator
         if: always()
         run: |
           xcrun simctl shutdown "$SIMULATOR_ID" || true
-      
+
       - name: Generate Test Summary
         if: always()
         run: |
