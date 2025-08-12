@@ -27,7 +27,15 @@ jobs:
           cargo build --package crashpad-rs-sys
           cargo build --package crashpad-rs
       - name: test
-        run: cargo nextest run --profile ci
+        run: |
+          # Run tests with both JUnit and JSON output
+          cargo nextest run --profile ci
+          
+          # Generate JSON output for parsing
+          NEXTEST_EXPERIMENTAL_LIBTEST_JSON=1 cargo nextest run --message-format libtest-json 2>/dev/null > test-output.json
+          
+          # Parse JSON using shared script
+          bash .github/scripts/parse-nextest-json.sh "macOS" "$(uname -m)" "test-output.json"
 
       - name: Upload Test Results (JUnit)
         if: always()
@@ -35,6 +43,14 @@ jobs:
         with:
           name: test-results-macos-junit
           path: target/nextest/ci/junit.xml
+          retention-days: 7
+      
+      - name: Upload Test Results (Text)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-macos
+          path: test-results.txt
           retention-days: 7
 
       - name: Generate Test Summary

@@ -138,13 +138,29 @@ jobs:
       - name: Save Test Results
         if: always()
         run: |
+          # Calculate total test count and passed/failed
+          TOTAL_TESTS=3
+          PASSED_TESTS=0
+          FAILED_TESTS=0
+          
+          [ "$TEST1_RESULT" = "PASS" ] && PASSED_TESTS=$((PASSED_TESTS + 1)) || FAILED_TESTS=$((FAILED_TESTS + 1))
+          [ "$TEST2_RESULT" = "PASS" ] && PASSED_TESTS=$((PASSED_TESTS + 1)) || FAILED_TESTS=$((FAILED_TESTS + 1))
+          [ "$TEST3_RESULT" = "PASS" ] && PASSED_TESTS=$((PASSED_TESTS + 1)) || FAILED_TESTS=$((FAILED_TESTS + 1))
+          
           cat > test-results.txt <<EOF
           platform: iOS
           arch: ${{ matrix.arch || 'aarch64' }}
           simulator: iPhone
-          test_initialization: ${TEST1_RESULT:-UNKNOWN}
-          test_crash_trigger: ${TEST2_RESULT:-UNKNOWN}
-          test_tap_mode: ${TEST3_RESULT:-UNKNOWN}
+          test_count: $TOTAL_TESTS
+          test_passed: $PASSED_TESTS
+          test_failed: $FAILED_TESTS
+          test_skipped: 0
+          
+          test_details:
+            - test_initialization: ${TEST1_RESULT:-UNKNOWN}
+            - test_crash_trigger: ${TEST2_RESULT:-UNKNOWN}
+            - test_tap_mode: ${TEST3_RESULT:-UNKNOWN}
+          
           timestamp: $(date -u +"%Y-%m-%dT%H:%M:%SZ")
           EOF
           

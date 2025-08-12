@@ -59,9 +59,11 @@ jobs:
             echo "Found test result files:"
             ls -la test-results/*.txt
             
-            # Count results
+            # Initialize counters
             TOTAL_PASS=0
             TOTAL_FAIL=0
+            TOTAL_SKIP=0
+            TOTAL_COUNT=0
             PLATFORMS=""
             
             for file in test-results/*.txt; do
@@ -69,19 +71,33 @@ jobs:
                 PLATFORM=$(grep "^platform:" "$file" | cut -d' ' -f2)
                 PLATFORMS="${PLATFORMS}${PLATFORM} "
                 
-                # Count test results
-                grep -q "test_.*: PASS" "$file" && TOTAL_PASS=$((TOTAL_PASS + $(grep -c "test_.*: PASS" "$file")))
-                grep -q "test_.*: FAIL" "$file" && TOTAL_FAIL=$((TOTAL_FAIL + $(grep -c "test_.*: FAIL" "$file")))
+                # Extract test counts from new unified format
+                PASSED=$(grep "^test_passed:" "$file" | cut -d' ' -f2 || echo "0")
+                FAILED=$(grep "^test_failed:" "$file" | cut -d' ' -f2 || echo "0")
+                SKIPPED=$(grep "^test_skipped:" "$file" | cut -d' ' -f2 || echo "0")
+                COUNT=$(grep "^test_count:" "$file" | cut -d' ' -f2 || echo "0")
+                
+                # Add to totals
+                TOTAL_PASS=$((TOTAL_PASS + PASSED))
+                TOTAL_FAIL=$((TOTAL_FAIL + FAILED))
+                TOTAL_SKIP=$((TOTAL_SKIP + SKIPPED))
+                TOTAL_COUNT=$((TOTAL_COUNT + COUNT))
+                
+                echo "Platform: $PLATFORM - Tests: $COUNT, Passed: $PASSED, Failed: $FAILED, Skipped: $SKIPPED"
               fi
             done
             
             echo "total_pass=$TOTAL_PASS" >> $GITHUB_OUTPUT
             echo "total_fail=$TOTAL_FAIL" >> $GITHUB_OUTPUT
+            echo "total_skip=$TOTAL_SKIP" >> $GITHUB_OUTPUT
+            echo "total_count=$TOTAL_COUNT" >> $GITHUB_OUTPUT
             echo "platforms=$PLATFORMS" >> $GITHUB_OUTPUT
           else
             echo "No test results found"
             echo "total_pass=0" >> $GITHUB_OUTPUT
             echo "total_fail=0" >> $GITHUB_OUTPUT
+            echo "total_skip=0" >> $GITHUB_OUTPUT
+            echo "total_count=0" >> $GITHUB_OUTPUT
             echo "platforms=none" >> $GITHUB_OUTPUT
           fi
       
@@ -99,6 +115,8 @@ jobs:
             
             const totalPass = parseInt('${{ steps.parse.outputs.total_pass }}') || 0;
             const totalFail = parseInt('${{ steps.parse.outputs.total_fail }}') || 0;
+            const totalSkip = parseInt('${{ steps.parse.outputs.total_skip }}') || 0;
+            const totalCount = parseInt('${{ steps.parse.outputs.total_count }}') || 0;
             const platforms = '${{ steps.parse.outputs.platforms }}' || 'none';
             
             const emoji = workflow.conclusion === 'success' ? '✅' : '❌';
@@ -108,13 +126,13 @@ jobs:
             
             // Overall summary
             body += `### Summary\n`;
-            body += `| Workflow | Status | Tests | Duration |\n`;
-            body += `|----------|--------|-------|----------|\n`;
-            body += `| ${workflow.name} | ${emoji} ${status} | ✅ ${totalPass} / ❌ ${totalFail} | ${Math.round((new Date(workflow.updated_at) - new Date(workflow.created_at)) / 1000)}s |\n`;
+            body += `| Workflow | Status | Tests | Passed | Failed | Skipped | Duration |\n`;
+            body += `|----------|--------|-------|--------|--------|---------|----------|\n`;
+            body += `| ${workflow.name} | ${emoji} ${status} | ${totalCount} | ✅ ${totalPass} | ❌ ${totalFail} | ⏭️ ${totalSkip} | ${Math.round((new Date(workflow.updated_at) - new Date(workflow.created_at)) / 1000)}s |\n`;
             body += `\n`;
             
             // Detailed results per platform if test results were found
-            if (totalPass > 0 || totalFail > 0) {
+            if (totalCount > 0) {
               body += `### Detailed Results\n\n`;
               
               // Read and display test results from artifacts
@@ -123,19 +141,24 @@ jobs:
               
               for (const file of testFiles) {
                 const content = fs.readFileSync(`test-results/${file}`, 'utf8');
-                const lines = content.split('\n');
-                const platform = lines.find(l => l.startsWith('platform:'))?.split(': ')[1] || 'Unknown';
-                const arch = lines.find(l => l.startsWith('arch:'))?.split(': ')[1] || '';
+                const lines = content.split('\n').filter(l => l.trim());
                 
-                // Get test results
-                const tests = lines.filter(l => l.startsWith('test_'));
-                let testSummary = '';
-                tests.forEach(test => {
-                  const [name, result] = test.split(': ');
-                  const testName = name.replace('test_', '').replace(/_/g, ' ');
-                  const icon = result === 'PASS' ? '✅' : result === 'FAIL' ? '❌' : '⏭️';
-                  testSummary += `- ${icon} ${testName}\n`;
+                // Parse key-value pairs
+                const data = {};
+                lines.forEach(line => {
+                  if (line.includes(':')) {
+                    const [key, ...valueParts] = line.split(':');
+                    data[key.trim()] = valueParts.join(':').trim();
+                  }
                 });
+                
+                const platform = data.platform || 'Unknown';
+                const arch = data.arch || '';
+                const testCount = data.test_count || '0';
+                const testPassed = data.test_passed || '0';
+                const testFailed = data.test_failed || '0';
+                const testSkipped = data.test_skipped || '0';
+                const duration = data.total_duration || 'N/A';
                 
                 // Platform emoji
                 const platformEmoji = platform === 'Android' ? '🤖' : 
@@ -144,7 +167,40 @@ jobs:
                                      platform === 'Linux' ? '🐧' : '💻';
                 
                 body += `#### ${platformEmoji} ${platform}${arch ? ` (${arch})` : ''}\n`;
-                body += testSummary || '- No test results\n';
+                body += `- **Tests:** ${testCount} total\n`;
+                body += `- **Results:** ✅ ${testPassed} passed, ❌ ${testFailed} failed, ⏭️ ${testSkipped} skipped\n`;
+                body += `- **Duration:** ${duration}\n`;
+                
+                // Show slowest tests for Linux/macOS
+                if ((platform === 'Linux' || platform === 'macOS') && lines.some(l => l.includes('slowest_tests'))) {
+                  body += `\n<details><summary>⏱️ Slowest Tests</summary>\n\n`;
+                  let inSlowest = false;
+                  lines.forEach(line => {
+                    if (line.includes('slowest_tests:')) {
+                      inSlowest = true;
+                    } else if (inSlowest && line.startsWith('  - ')) {
+                      body += `${line}\n`;
+                    } else if (inSlowest && !line.startsWith('  ')) {
+                      inSlowest = false;
+                    }
+                  });
+                  body += `\n</details>\n`;
+                }
+                
+                // Show failed tests if any
+                if (parseInt(testFailed) > 0 && lines.some(l => l.includes('failed_tests'))) {
+                  body += `\n<details><summary>❌ Failed Tests</summary>\n\n`;
+                  let inFailed = false;
+                  lines.forEach(line => {
+                    if (line.includes('failed_tests:')) {
+                      inFailed = true;
+                    } else if (inFailed && line.startsWith('  - ')) {
+                      body += `${line}\n`;
+                    }
+                  });
+                  body += `\n</details>\n`;
+                }
+                
                 body += `\n`;
               }
             } else {
