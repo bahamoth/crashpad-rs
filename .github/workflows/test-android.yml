@@ -3,6 +3,9 @@ name: Build Android
 on:
   pull_request:
 
+permissions:
+  pull-requests: write
+
 concurrency:
   group: android-${{ github.ref }}
   cancel-in-progress: true
@@ -267,6 +270,102 @@ jobs:
           name: test-results-android-${{ matrix.arch }}-api${{ matrix.api-level }}
           path: test-results.txt
           retention-days: 7
+
+      - name: Post PR Comment
+        if: always() && github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            
+            // Read test results  
+            let testResults = {};
+            
+            if (fs.existsSync('test_results.env')) {
+              const envContent = fs.readFileSync('test_results.env', 'utf8');
+              envContent.split('\n').forEach(line => {
+                if (line.includes('=')) {
+                  const [key, value] = line.split('=');
+                  testResults[key] = value;
+                }
+              });
+            }
+            
+            const test1 = testResults.test1_result || 'UNKNOWN';
+            const test2 = testResults.test2_result || 'UNKNOWN';
+            const test3 = testResults.test3_result || 'UNKNOWN';
+            
+            // Calculate totals
+            const totalTests = 3;
+            let passedTests = 0;
+            let failedTests = 0;
+            
+            [test1, test2, test3].forEach(result => {
+              if (result === 'PASS') passedTests++;
+              else if (result === 'FAIL') failedTests++;
+            });
+            
+            // Build comment body
+            const status = failedTests === 0 ? '✅' : '❌';
+            const statusText = failedTests === 0 ? 'Passed' : 'Failed';
+            
+            let body = `## 🤖 Android Test Results\n\n`;
+            body += `**Status:** ${status} ${statusText}\n`;
+            body += `**Tests:** ${totalTests} total, ${passedTests} passed, ${failedTests} failed\n`;
+            body += `**Platform:** Android Emulator (API ${{ matrix.api-level }}, ${{ matrix.arch }})\n\n`;
+            
+            // Show test details
+            body += `### Test Details\n`;
+            body += `| Test | Description | Result |\n`;
+            body += `|------|-------------|--------|\n`;
+            
+            const formatResult = (result) => {
+              switch(result) {
+                case 'PASS': return '✅ PASS';
+                case 'FAIL': return '❌ FAIL';
+                default: return '❓ UNKNOWN';
+              }
+            };
+            
+            body += `| Test 1 | Handler Initialization | ${formatResult(test1)} |\n`;
+            body += `| Test 2 | Crash Trigger | ${formatResult(test2)} |\n`;
+            body += `| Test 3 | Dump Generation | ${formatResult(test3)} |\n`;
+            body += `\n`;
+            
+            body += `### Test Artifacts\n`;
+            body += `- Crash dumps location: \`/data/local/tmp/crashpad_database/\`\n`;
+            body += `- Metrics location: \`/data/local/tmp/crashpad_metrics/\`\n\n`;
+            
+            body += `---\n`;
+            body += `🔗 [View Full Logs](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})\n`;
+            
+            // Find and update or create comment
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            
+            const botComment = comments.find(comment => 
+              comment.user.type === 'Bot' && 
+              comment.body.includes('🤖 Android Test Results')
+            );
+            
+            if (botComment) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: botComment.id,
+                body: body
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: body
+              });
+            }
 
       - name: Generate Test Summary
         if: always()
