@@ -147,11 +147,11 @@ jobs:
             source test_results.env
           fi
           
-          # Calculate failures
+          # Calculate failures (only count actual FAIL, not empty/unknown)
           FAILURES=0
-          [ "${test1_result}" != "PASS" ] && [ "${test1_result}" != "" ] && FAILURES=$((FAILURES + 1))
-          [ "${test2_result}" != "PASS" ] && [ "${test2_result}" != "" ] && FAILURES=$((FAILURES + 1))
-          [ "${test3_result}" != "PASS" ] && [ "${test3_result}" != "" ] && FAILURES=$((FAILURES + 1))
+          [ "${test1_result}" = "FAIL" ] && FAILURES=$((FAILURES + 1))
+          [ "${test2_result}" = "FAIL" ] && FAILURES=$((FAILURES + 1))
+          [ "${test3_result}" = "FAIL" ] && FAILURES=$((FAILURES + 1))
           
           # Create JUnit XML
           cat > junit.xml <<EOF
@@ -161,19 +161,19 @@ jobs:
               <testcase name="Handler Initialization" classname="ios_simulator_test" time="0.1">
           EOF
           
-          if [ "${test1_result}" != "PASS" ] && [ "${test1_result}" != "" ]; then
+          if [ "${test1_result}" = "FAIL" ]; then
             echo '      <failure message="Handler initialization failed" type="AssertionError"/>' >> junit.xml
           fi
           echo '    </testcase>' >> junit.xml
           
           echo '    <testcase name="Crash Trigger" classname="ios_simulator_test" time="0.2">' >> junit.xml
-          if [ "${test2_result}" != "PASS" ] && [ "${test2_result}" != "" ]; then
+          if [ "${test2_result}" = "FAIL" ]; then
             echo '      <failure message="Crash trigger failed" type="AssertionError"/>' >> junit.xml
           fi
           echo '    </testcase>' >> junit.xml
           
           echo '    <testcase name="TAP Mode Tests" classname="ios_simulator_test" time="0.1">' >> junit.xml
-          if [ "${test3_result}" != "PASS" ] && [ "${test3_result}" != "" ]; then
+          if [ "${test3_result}" = "FAIL" ]; then
             echo '      <failure message="TAP mode tests failed" type="AssertionError"/>' >> junit.xml
           fi
           echo '    </testcase>' >> junit.xml
@@ -198,9 +198,12 @@ jobs:
         uses: mikepenz/action-junit-report@v4
         with:
           report_paths: junit.xml
-          summary: true
-          show_failed: true
-          show_skipped: false
+          check_name: iOS Test Results
+          comment: true
+          update_check: true
+          annotate_only: false
+          detailed_summary: true
+          include_passed: true
 
       - name: Shutdown Simulator
         if: always()
