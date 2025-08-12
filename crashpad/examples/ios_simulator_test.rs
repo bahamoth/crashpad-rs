@@ -7,6 +7,18 @@
 use crashpad_rs::{CrashpadClient, CrashpadConfig};
 #[cfg(any(target_os = "ios", target_os = "tvos", target_os = "watchos"))]
 use std::collections::HashMap;
+#[cfg(any(target_os = "ios", target_os = "tvos", target_os = "watchos"))]
+use std::process;
+
+// Exit codes for different scenarios
+#[cfg(any(target_os = "ios", target_os = "tvos", target_os = "watchos"))]
+const EXIT_SUCCESS: i32 = 0;
+#[cfg(any(target_os = "ios", target_os = "tvos", target_os = "watchos"))]
+const EXIT_INIT_FAILED: i32 = 1;
+#[cfg(any(target_os = "ios", target_os = "tvos", target_os = "watchos"))]
+const EXIT_HANDLER_FAILED: i32 = 2;
+#[cfg(any(target_os = "ios", target_os = "tvos", target_os = "watchos"))]
+const EXIT_TEST_FAILED: i32 = 3;
 
 #[cfg(not(any(target_os = "ios", target_os = "tvos", target_os = "watchos")))]
 fn main() {
@@ -27,7 +39,7 @@ fn main() {
         }
         Err(e) => {
             eprintln!("✗ Failed to create client: {}", e);
-            return;
+            process::exit(EXIT_INIT_FAILED);
         }
     };
 
@@ -49,7 +61,7 @@ fn main() {
         Ok(_) => println!("✓ Started in-process handler"),
         Err(e) => {
             eprintln!("✗ Failed to start in-process handler: {}", e);
-            return;
+            process::exit(EXIT_HANDLER_FAILED);
         }
     }
 
@@ -58,27 +70,67 @@ fn main() {
     client.process_intermediate_dumps();
     println!("✓ Processed intermediate dumps");
 
-    // Check command line arguments or environment variables for CI mode
+    // Check command line arguments
     let args: Vec<String> = std::env::args().collect();
-    let should_crash = args.len() > 1 && args[1] == "crash";
-    let should_crash_env = std::env::var("CRASHPAD_TEST_CRASH").is_ok();
+    let command = args.get(1).map(|s| s.as_str());
 
-    if should_crash || should_crash_env {
-        println!("\nTriggering crash now...");
-
-        // Trigger an actual crash
-        unsafe {
-            // Null pointer dereference
-            let null_ptr: *const i32 = std::ptr::null();
-            println!("About to crash with value: {}", *null_ptr);
+    match command {
+        Some("crash") => {
+            println!("\nTriggering crash now...");
+            // Trigger an actual crash
+            unsafe {
+                // Null pointer dereference
+                let null_ptr: *const i32 = std::ptr::null();
+                println!("About to crash with value: {}", *null_ptr);
+            }
         }
-    } else {
-        println!("\niOS Crashpad initialized successfully!");
-        println!("In-process handler is active and monitoring for crashes.");
-        println!("To trigger a crash, run with:");
-        println!("  {} crash", args[0]);
-        println!("Or set environment variable:");
-        println!("  CRASHPAD_TEST_CRASH=1 {}", args[0]);
+        Some("test") => {
+            // Automated test mode with TAP output
+            println!("\n# TAP version 13");
+            println!("1..3");
+
+            // Test 1: Client creation (already passed if we got here)
+            println!("ok 1 - Crashpad client created");
+
+            // Test 2: In-process handler started (already passed if we got here)
+            println!("ok 2 - In-process handler started successfully");
+
+            // Test 3: Intermediate dumps processing
+            println!("ok 3 - Intermediate dumps processed");
+
+            println!("\n# All tests passed");
+            process::exit(EXIT_SUCCESS);
+        }
+        Some("--help") | Some("-h") => {
+            println!("\nUsage: {} [COMMAND]", args[0]);
+            println!("\nCommands:");
+            println!("  crash    Trigger a crash to test handler");
+            println!("  test     Run automated tests with TAP output");
+            println!("  --help   Show this help message");
+            println!("\nEnvironment variables:");
+            println!(
+                "  CRASHPAD_TEST_CRASH   Set to trigger crash (deprecated, use 'crash' command)"
+            );
+        }
+        _ => {
+            // Interactive mode (default)
+            let should_crash_env = std::env::var("CRASHPAD_TEST_CRASH").is_ok();
+
+            if should_crash_env {
+                println!("\nTriggering crash due to CRASHPAD_TEST_CRASH environment variable...");
+                unsafe {
+                    let null_ptr: *const i32 = std::ptr::null();
+                    println!("About to crash with value: {}", *null_ptr);
+                }
+            } else {
+                println!("\niOS Crashpad initialized successfully!");
+                println!("In-process handler is active and monitoring for crashes.");
+                println!("To trigger a crash, run with:");
+                println!("  {} crash", args[0]);
+                println!("Or set environment variable:");
+                println!("  CRASHPAD_TEST_CRASH=1 {}", args[0]);
+            }
+        }
     }
 
     println!("Test completed (you shouldn't see this after a crash)");
