@@ -12,6 +12,51 @@ use config::BuildConfig;
 use phases::BuildPhases;
 
 fn main() {
+    // Check if we're building on docs.rs
+    if std::env::var("DOCS_RS").is_ok() {
+        println!("cargo:warning=docs.rs build detected, skipping native build");
+
+        // Create dummy bindings for docs.rs
+        let out_dir = std::env::var("OUT_DIR").unwrap();
+        let bindings_path = std::path::Path::new(&out_dir).join("bindings.rs");
+
+        // Create minimal bindings to allow documentation build
+        // These match the actual C API in wrapper.h
+        std::fs::write(
+            &bindings_path,
+            r#"
+            //! Dummy bindings for docs.rs build
+            //! 
+            //! These are placeholder types to allow documentation generation.
+            //! Real bindings are generated during normal builds.
+            
+            use std::os::raw::{c_char, c_void};
+            
+            // Opaque handle types
+            pub type crashpad_client_t = *mut c_void;
+            
+            // Core functions from wrapper.h
+            extern "C" {
+                pub fn crashpad_client_new() -> crashpad_client_t;
+                pub fn crashpad_client_delete(client: crashpad_client_t);
+                pub fn crashpad_client_start_handler(
+                    client: crashpad_client_t,
+                    handler_path: *const c_char,
+                    database_path: *const c_char,
+                    metrics_path: *const c_char,
+                    url: *const c_char,
+                    annotations_keys: *const *const c_char,
+                    annotations_values: *const *const c_char,
+                    annotations_count: usize,
+                ) -> bool;
+            }
+        "#,
+        )
+        .expect("Failed to write dummy bindings");
+
+        return;
+    }
+
     if let Err(e) = run() {
         eprintln!("Build failed: {e}");
         std::process::exit(1);
