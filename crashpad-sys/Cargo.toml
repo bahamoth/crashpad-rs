@@ -28,3 +28,9 @@ zip = "0.6"
 
 [features]
 default = []
+
+[package.metadata.docs.rs]
+# Don't build or show dependencies' documentation
+no-deps = true
+# Build only for the default target to save resources
+targets = ["x86_64-unknown-linux-gnu"]
