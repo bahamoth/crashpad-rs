@@ -8,7 +8,7 @@ repository = { workspace = true }
 rust-version = { workspace = true }
 description = "Safe Rust bindings to Google Crashpad - A crash-reporting system"
 homepage = { workspace = true }
-documentation = { workspace = true }
+documentation = "https://docs.rs/crashpad-rs"
 readme = { workspace = true }
 keywords = { workspace = true }
 categories = { workspace = true }
