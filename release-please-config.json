@@ -6,9 +6,15 @@
   "bump-patch-for-minor-pre-major": true,
   "packages": {
     ".": {
-      "release-type": "rust",
       "changelog-path": "CHANGELOG.md",
-      "package-name": "crashpad-rs"
+      "package-name": "crashpad-rs",
+      "extra-files": [
+        {
+          "type": "toml",
+          "path": "Cargo.toml",
+          "jsonpath": "$.workspace.package.version"
+        }
+      ]
     }
   }
 }

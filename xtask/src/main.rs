@@ -1,4 +1,5 @@
 use anyhow::{Context, Result};
+use chrono::Local;
 use clap::{Parser, Subcommand};
 use regex::Regex;
 use std::collections::HashMap;
@@ -38,6 +39,8 @@ enum Commands {
         #[arg(long)]
         create_pr: bool,
     },
+    /// Create symlinks for Crashpad dependencies
+    Symlink,
 }
 
 fn main() -> Result<()> {
@@ -51,6 +54,7 @@ fn main() -> Result<()> {
         Commands::Clean => clean(&sh)?,
         Commands::InstallTools => install_tools(&sh)?,
         Commands::UpdateDeps { create_pr } => update_deps(&sh, create_pr)?,
+        Commands::Symlink => create_symlinks(&sh)?,
     }
 
     Ok(())
@@ -59,8 +63,11 @@ fn main() -> Result<()> {
 fn build(sh: &Shell, release: bool) -> Result<()> {
     println!("Building crashpad-rs...");
 
-    let mode = if release { "--release" } else { "" };
-    cmd!(sh, "cargo build {mode}").run()?;
+    if release {
+        cmd!(sh, "cargo build --release").run()?;
+    } else {
+        cmd!(sh, "cargo build").run()?;
+    }
 
     println!("✅ Build completed successfully!");
     Ok(())
@@ -104,7 +111,7 @@ fn dist(sh: &Shell, output_dir: &Path) -> Result<()> {
 
     if !handler_path.exists() {
         anyhow::bail!(
-            "crashpad_handler not found at: {}\nMake sure to build crashpad-sys first",
+            "crashpad_handler not found at: {}\nMake sure to build crashpad-rs-sys first",
             handler_path.display()
         );
     }
@@ -115,7 +122,7 @@ fn dist(sh: &Shell, output_dir: &Path) -> Result<()> {
 
     // Copy Rust libraries
     let target_dir = workspace_root.join("target/release");
-    let lib_files = ["libcrashpad.rlib", "libcrashpad_sys.rlib"];
+    let lib_files = ["libcrashpad_rs.rlib", "libcrashpad_rs_sys.rlib"];
 
     for lib in &lib_files {
         let src = target_dir.join(lib);
@@ -327,8 +334,8 @@ fn update_deps(sh: &Shell, create_pr: bool) -> Result<()> {
 
     if create_pr {
         // Step 7: Create branch and commit
-        let date = cmd!(sh, "date +%Y%m%d").read()?;
-        let branch_name = format!("auto/update-deps-{}", date.trim());
+        let date = Local::now().format("%Y%m%d").to_string();
+        let branch_name = format!("auto/update-deps-{date}");
 
         println!("\n🌿 Creating branch: {branch_name}");
         cmd!(sh, "git checkout -b {branch_name}").run()?;
@@ -373,7 +380,93 @@ fn parse_deps(content: &str) -> Result<HashMap<String, String>> {
     Ok(deps)
 }
 
-// No longer needed - submodules are tracked by commit hash, not branch
-// fn update_gitmodules(sh: &Shell, deps: &HashMap<String, String>, crashpad_rev: &str) -> Result<()> {
-//     // Removed - we don't use branch field in .gitmodules anymore
-// }
+fn create_symlinks(sh: &Shell) -> Result<()> {
+    println!("🔗 Creating symlinks for Crashpad dependencies...");
+
+    let deps = vec![
+        ("mini_chromium", "mini_chromium"),
+        ("googletest", "googletest"),
+        ("zlib", "zlib"),
+        ("libfuzzer", "src"),
+        ("edo", "edo"),
+        ("lss", "lss"),
+    ];
+
+    let workspace_root = find_workspace_root(sh)?;
+    let crashpad_dir = workspace_root.join("crashpad-sys/third_party/crashpad");
+
+    for (dep_name, subdir) in deps {
+        let target = workspace_root.join(format!("crashpad-sys/third_party/{dep_name}"));
+        let link = crashpad_dir.join("third_party").join(dep_name).join(subdir);
+
+        // Skip if link already exists
+        if link.exists() {
+            println!("  ⏭️  {dep_name} already linked");
+            continue;
+        }
+
+        // Skip if target doesn't exist
+        if !target.exists() {
+            println!("  ⚠️  {dep_name} source not found, skipping");
+            continue;
+        }
+
+        // Create parent directory
+        if let Some(parent) = link.parent() {
+            sh.create_dir(parent)?;
+        }
+
+        // Calculate relative path from link to target
+        let link_parent = link.parent().unwrap();
+        let mut rel_path = PathBuf::new();
+
+        // Count how many directories up we need to go
+        let link_components: Vec<_> = link_parent
+            .strip_prefix(&workspace_root)
+            .unwrap_or(link_parent)
+            .components()
+            .collect();
+        let target_components: Vec<_> = target
+            .strip_prefix(&workspace_root)
+            .unwrap_or(&target)
+            .components()
+            .collect();
+
+        // Find common prefix length
+        let common_len = link_components
+            .iter()
+            .zip(target_components.iter())
+            .take_while(|(a, b)| a == b)
+            .count();
+
+        // Add ../ for each directory we need to go up
+        for _ in common_len..link_components.len() {
+            rel_path.push("..");
+        }
+
+        // Add the remaining target path
+        for component in &target_components[common_len..] {
+            rel_path.push(component);
+        }
+
+        // Create symlink
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::symlink;
+            symlink(&rel_path, &link)?;
+        }
+
+        #[cfg(windows)]
+        {
+            use std::os::windows::fs::symlink_dir;
+            symlink_dir(&rel_path, &link)?;
+        }
+
+        println!("  ✓ Linked {} -> {}", dep_name, rel_path.display());
+    }
+
+    println!("✅ Symlinks created successfully");
+    println!("📦 You can now run: cargo package --package crashpad-rs-sys");
+
+    Ok(())
+}

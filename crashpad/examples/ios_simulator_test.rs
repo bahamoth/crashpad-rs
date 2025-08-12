@@ -4,9 +4,21 @@
 //! The Crashpad client operates within the same process.
 
 #[cfg(any(target_os = "ios", target_os = "tvos", target_os = "watchos"))]
-use crashpad::{CrashpadClient, CrashpadConfig};
+use crashpad_rs::{CrashpadClient, CrashpadConfig};
 #[cfg(any(target_os = "ios", target_os = "tvos", target_os = "watchos"))]
 use std::collections::HashMap;
+#[cfg(any(target_os = "ios", target_os = "tvos", target_os = "watchos"))]
+use std::process;
+
+// Exit codes for different scenarios
+#[cfg(any(target_os = "ios", target_os = "tvos", target_os = "watchos"))]
+const EXIT_SUCCESS: i32 = 0;
+#[cfg(any(target_os = "ios", target_os = "tvos", target_os = "watchos"))]
+const EXIT_INIT_FAILED: i32 = 1;
+#[cfg(any(target_os = "ios", target_os = "tvos", target_os = "watchos"))]
+const EXIT_HANDLER_FAILED: i32 = 2;
+#[cfg(any(target_os = "ios", target_os = "tvos", target_os = "watchos"))]
+const EXIT_TEST_FAILED: i32 = 3;
 
 #[cfg(not(any(target_os = "ios", target_os = "tvos", target_os = "watchos")))]
 fn main() {
@@ -27,7 +39,7 @@ fn main() {
         }
         Err(e) => {
             eprintln!("✗ Failed to create client: {}", e);
-            return;
+            process::exit(EXIT_INIT_FAILED);
         }
     };
 
@@ -49,7 +61,7 @@ fn main() {
         Ok(_) => println!("✓ Started in-process handler"),
         Err(e) => {
             eprintln!("✗ Failed to start in-process handler: {}", e);
-            return;
+            process::exit(EXIT_HANDLER_FAILED);
         }
     }
 
@@ -58,50 +70,66 @@ fn main() {
     client.process_intermediate_dumps();
     println!("✓ Processed intermediate dumps");
 
-    println!("\nTest scenarios:");
-    println!("1. Normal operation test");
-    println!("2. Null pointer dereference");
-    println!("3. Abort signal");
-    println!("4. Exit normally");
-    println!("5. Check crash dump status");
+    // Check command line arguments
+    let args: Vec<String> = std::env::args().collect();
+    let command = args.get(1).map(|s| s.as_str());
 
-    // Actually trigger a crash for testing
-    println!("\nTriggering crash for testing...");
-    let choice = "2"; // Null pointer dereference
-
-    match choice {
-        "1" => {
-            println!("Running normal operation test...");
-            // Simulate some work
-            for i in 0..5 {
-                println!("Working... {}/5", i + 1);
-                std::thread::sleep(std::time::Duration::from_secs(1));
-            }
-            println!("Normal operation completed successfully!");
-        }
-        "2" => {
-            println!("Triggering null pointer dereference...");
-            std::thread::sleep(std::time::Duration::from_secs(1));
+    match command {
+        Some("crash") => {
+            println!("\nTriggering crash now...");
+            // Trigger an actual crash
             unsafe {
+                // Null pointer dereference
                 let null_ptr: *const i32 = std::ptr::null();
-                println!("Value at null: {}", *null_ptr); // This will crash
+                println!("About to crash with value: {}", *null_ptr);
             }
         }
-        "3" => {
-            println!("Triggering abort...");
-            std::thread::sleep(std::time::Duration::from_secs(1));
-            std::process::abort();
+        Some("test") => {
+            // Automated test mode with TAP output
+            println!("\n# TAP version 13");
+            println!("1..3");
+
+            // Test 1: Client creation (already passed if we got here)
+            println!("ok 1 - Crashpad client created");
+
+            // Test 2: In-process handler started (already passed if we got here)
+            println!("ok 2 - In-process handler started successfully");
+
+            // Test 3: Intermediate dumps processing
+            println!("ok 3 - Intermediate dumps processed");
+
+            println!("\n# All tests passed");
+            process::exit(EXIT_SUCCESS);
         }
-        "4" => {
-            println!("Exiting normally...");
-        }
-        "5" => {
-            println!("Checking crash dump directories...");
-            println!("(ProcessIntermediateDumps was called during initialization)");
-            println!("Any intermediate dumps should now be converted to minidumps.");
+        Some("--help") | Some("-h") => {
+            println!("\nUsage: {} [COMMAND]", args[0]);
+            println!("\nCommands:");
+            println!("  crash    Trigger a crash to test handler");
+            println!("  test     Run automated tests with TAP output");
+            println!("  --help   Show this help message");
+            println!("\nEnvironment variables:");
+            println!(
+                "  CRASHPAD_TEST_CRASH   Set to trigger crash (deprecated, use 'crash' command)"
+            );
         }
         _ => {
-            println!("Invalid choice, exiting...");
+            // Interactive mode (default)
+            let should_crash_env = std::env::var("CRASHPAD_TEST_CRASH").is_ok();
+
+            if should_crash_env {
+                println!("\nTriggering crash due to CRASHPAD_TEST_CRASH environment variable...");
+                unsafe {
+                    let null_ptr: *const i32 = std::ptr::null();
+                    println!("About to crash with value: {}", *null_ptr);
+                }
+            } else {
+                println!("\niOS Crashpad initialized successfully!");
+                println!("In-process handler is active and monitoring for crashes.");
+                println!("To trigger a crash, run with:");
+                println!("  {} crash", args[0]);
+                println!("Or set environment variable:");
+                println!("  CRASHPAD_TEST_CRASH=1 {}", args[0]);
+            }
         }
     }
 

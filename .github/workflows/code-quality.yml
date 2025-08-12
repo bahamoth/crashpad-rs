@@ -2,8 +2,6 @@ name: Code Quality
 
 on:
   pull_request:
-  push:
-    branches: [ main ]
 
 concurrency:
   group: code-quality-${{ github.ref }}
@@ -11,6 +9,7 @@ concurrency:
 
 jobs:
   code-quality:
+    if: github.actor != 'release-please[bot]'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

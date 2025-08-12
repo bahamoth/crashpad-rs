@@ -1,0 +1,73 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write  # Required for creating labels
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
+      version: ${{ steps.release.outputs.version }}
+    steps:
+      - uses: googleapis/release-please-action@v4
+        id: release
+        with:
+          # Configuration is in release-please-config.json
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+          # Use PAT if GITHUB_TOKEN doesn't have enough permissions
+          # token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+      - name: Release Info
+        if: ${{ steps.release.outputs.release_created }}
+        run: |
+          echo "Release created: ${{ steps.release.outputs.release_created }}"
+          echo "Tag name: ${{ steps.release.outputs.tag_name }}"
+          echo "Version: ${{ steps.release.outputs.version }}"
+          echo "Upload URL: ${{ steps.release.outputs.upload_url }}"
+
+  publish:
+    needs: release
+    if: ${{ needs.release.outputs.release_created }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+          
+      - uses: Swatinem/rust-cache@v2
+      
+      - name: Create symlinks for packaging
+        run: cargo xtask symlink
+        
+      - name: Publish crashpad-rs-sys to crates.io
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CRATES_DEPLOYMENT_SECRET }}
+        run: |
+          cd crashpad-sys
+          echo "Running dry-run for crashpad-rs-sys..."
+          cargo publish --dry-run
+          echo "Publishing crashpad-rs-sys to crates.io..."
+          cargo publish
+          
+      - name: Publish crashpad-rs to crates.io  
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CRATES_DEPLOYMENT_SECRET }}
+        run: |
+          cd crashpad
+          echo "Running dry-run for crashpad-rs..."
+          cargo publish --dry-run
+          echo "Publishing crashpad-rs to crates.io..."
+          cargo publish

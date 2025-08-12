@@ -1,6 +1,6 @@
 //! Integration test for handler search fallback logic
 
-use crashpad::CrashpadConfig;
+use crashpad_rs::CrashpadConfig;
 use std::env;
 use std::fs;
 use std::path::PathBuf;

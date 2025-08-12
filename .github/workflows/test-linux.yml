@@ -1,0 +1,92 @@
+name: Build Linux
+
+on:
+  pull_request:
+
+permissions:
+  pull-requests: write
+
+concurrency:
+  group: linux-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  linux:
+    if: github.actor != 'release-please[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 'stable'
+      - uses: Swatinem/rust-cache@v2
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential zlib1g-dev libcurl4-openssl-dev clang pkg-config
+      - name: Install dependencies
+        run: |
+          cargo xtask install-tools
+      - name: linux Build
+        run: |
+          cargo build --package crashpad-rs-sys
+          cargo build --package crashpad-rs
+      - name: test
+        run: |
+          cargo nextest run --profile ci
+
+      - name: Upload Test Results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-linux
+          path: target/nextest/ci/junit.xml
+          retention-days: 7
+
+      - name: Test Report
+        if: always()
+        uses: mikepenz/action-junit-report@v4
+        with:
+          report_paths: target/nextest/ci/junit.xml
+          check_name: Linux Test Results
+          comment: true
+          update_check: true
+          annotate_only: false
+          detailed_summary: true
+          include_passed: true
+
+      - name: Generate Test Summary
+        if: always()
+        run: |
+          echo "## 🐧 Linux Test Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Check if JUnit file exists and parse it
+          if [ -f "target/nextest/ci/junit.xml" ]; then
+            # Simple parsing of JUnit XML for summary
+            TESTS=$(grep -c '<testcase' target/nextest/ci/junit.xml || echo "0")
+            FAILURES=$(grep -c '<failure' target/nextest/ci/junit.xml || echo "0")
+            ERRORS=$(grep -c '<error' target/nextest/ci/junit.xml || echo "0")
+            PASSED=$((TESTS - FAILURES - ERRORS))
+          
+            echo "### Test Results" >> $GITHUB_STEP_SUMMARY
+            echo "| Metric | Value |" >> $GITHUB_STEP_SUMMARY
+            echo "|--------|-------|" >> $GITHUB_STEP_SUMMARY
+            echo "| Total Tests | $TESTS |" >> $GITHUB_STEP_SUMMARY
+            echo "| Passed | ✅ $PASSED |" >> $GITHUB_STEP_SUMMARY
+            echo "| Failed | ❌ $FAILURES |" >> $GITHUB_STEP_SUMMARY
+            echo "| Errors | ⚠️ $ERRORS |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "### Test Results" >> $GITHUB_STEP_SUMMARY
+            echo "No test results file found (JUnit XML)" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Build Configuration" >> $GITHUB_STEP_SUMMARY
+          echo "- **Platform**: Linux (Ubuntu)" >> $GITHUB_STEP_SUMMARY
+          echo "- **Architecture**: x86_64" >> $GITHUB_STEP_SUMMARY
+          echo "- **Test Runner**: cargo-nextest" >> $GITHUB_STEP_SUMMARY
+          echo "- **Output Format**: JUnit XML" >> $GITHUB_STEP_SUMMARY
+

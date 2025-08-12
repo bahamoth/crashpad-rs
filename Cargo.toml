@@ -1,15 +1,16 @@
 [workspace]
 members = ["crashpad-sys", "crashpad", "xtask"]
+default-members = ["crashpad-sys", "crashpad"]
 resolver = "2"
 
 [workspace.package]
 version = "0.1.0"
 authors = ["bahamoth <bahamoth@naver.com>"]
 edition = "2021"
-license = "MIT OR Apache-2.0"
+license = "MIT"
 repository = "https://github.com/bahamoth/crashpad-rs"
 homepage = "https://github.com/bahamoth/crashpad-rs"
-documentation = "https://docs.rs/crashpad"
+documentation = "https://docs.rs/crashpad-rs"
 readme = "README.md"
 keywords = ["crash", "crashpad", "crash-reporting", "minidump"]
 categories = ["api-bindings", "development-tools::debugging"]

@@ -17,9 +17,16 @@ pub extern "C" fn pthread_atfork(
     0
 }
 
-use crashpad::{CrashpadClient, CrashpadConfig};
+use crashpad_rs::{CrashpadClient, CrashpadConfig};
 use std::collections::HashMap;
 use std::env;
+use std::process;
+
+// Exit codes for different scenarios
+const EXIT_SUCCESS: i32 = 0;
+const EXIT_INIT_FAILED: i32 = 1;
+const EXIT_HANDLER_FAILED: i32 = 2;
+const EXIT_TEST_FAILED: i32 = 3;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Crashpad Test CLI");
@@ -27,8 +34,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Interactive tool for testing Crashpad crash reporting\n");
 
     // Create a new Crashpad client
-    let client = CrashpadClient::new()?;
-    println!("✓ Created Crashpad client");
+    let client = match CrashpadClient::new() {
+        Ok(c) => {
+            println!("✓ Created Crashpad client");
+            c
+        }
+        Err(e) => {
+            eprintln!("✗ Failed to create Crashpad client: {e}");
+            process::exit(EXIT_INIT_FAILED);
+        }
+    };
 
     // Configure Crashpad with idiomatic builder pattern
     // Handler is now copied to target/{profile}/ or target/{target}/{profile}/
@@ -98,26 +113,80 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             eprintln!("- Set CRASHPAD_HANDLER environment variable to handler path");
             eprintln!("- Or ensure crashpad_handler is in the same directory as this executable");
             eprintln!("- Or install crashpad system-wide");
+            process::exit(EXIT_HANDLER_FAILED);
         }
     }
 
     // The client will remain active for the lifetime of this variable
     // When it's dropped, the handler connection will be closed
 
-    // Keep the process running for a bit to demonstrate it's working
-    println!("\nPress Enter to trigger a crash, or Ctrl+C to exit safely...");
+    // Check command line arguments
+    let args: Vec<String> = env::args().collect();
+    let command = args.get(1).map(|s| s.as_str());
 
-    let mut input = String::new();
-    std::io::stdin().read_line(&mut input)?;
+    match command {
+        Some("crash") => {
+            println!("\nTriggering crash now...");
+            // Trigger an actual crash
+            unsafe {
+                // Null pointer dereference
+                let null_ptr: *const i32 = std::ptr::null();
+                println!("About to crash with value: {}", *null_ptr);
+            }
+        }
+        Some("test") => {
+            // Automated test mode with TAP output
+            println!("\n# TAP version 13");
+            println!("1..3");
 
-    println!("Triggering crash in 1 second...");
-    std::thread::sleep(std::time::Duration::from_secs(1));
+            // Test 1: Initialization
+            println!("ok 1 - Crashpad client created");
 
-    // Trigger an actual crash
-    unsafe {
-        // Null pointer dereference
-        let null_ptr: *const i32 = std::ptr::null();
-        println!("About to crash with value: {}", *null_ptr);
+            // Test 2: Handler started
+            println!("ok 2 - Handler started successfully");
+
+            // Test 3: Configuration validated
+            let db_path = exe_dir.join("crashpad_database");
+            if db_path.exists() || std::fs::create_dir_all(&db_path).is_ok() {
+                println!("ok 3 - Database directory accessible");
+            } else {
+                println!("not ok 3 - Database directory not accessible");
+                process::exit(EXIT_TEST_FAILED);
+            }
+
+            println!("\n# All tests passed");
+            process::exit(EXIT_SUCCESS);
+        }
+        Some("--help") | Some("-h") => {
+            println!("\nUsage: {} [COMMAND]", args[0]);
+            println!("\nCommands:");
+            println!("  crash    Trigger a crash to test handler");
+            println!("  test     Run automated tests with TAP output");
+            println!("  --help   Show this help message");
+            println!("\nEnvironment variables:");
+            println!("  CRASHPAD_HANDLER   Path to crashpad_handler executable");
+            println!(
+                "  CRASHPAD_TEST_CRASH   Set to trigger crash (deprecated, use 'crash' command)"
+            );
+        }
+        _ => {
+            // Interactive mode (default)
+            let should_crash_env = env::var("CRASHPAD_TEST_CRASH").is_ok();
+
+            if should_crash_env {
+                println!("\nTriggering crash due to CRASHPAD_TEST_CRASH environment variable...");
+                unsafe {
+                    let null_ptr: *const i32 = std::ptr::null();
+                    println!("About to crash with value: {}", *null_ptr);
+                }
+            } else {
+                println!("\nCrashpad initialized successfully!");
+                println!("To trigger a crash, run with:");
+                println!("  {} crash", args[0]);
+                println!("Or set environment variable:");
+                println!("  CRASHPAD_TEST_CRASH=1 {}", args[0]);
+            }
+        }
     }
 
     Ok(())

@@ -9,7 +9,28 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 /// Tool versions from Crashpad's DEPS file
-/// Update these when updating Crashpad submodule
+///
+/// To update these versions:
+/// 1. Open crashpad-sys/third_party/crashpad/DEPS
+/// 2. Search for 'gn' in the deps_os section
+/// 3. Copy the git_revision value for GN
+/// 4. Search for 'ninja' in the deps section  
+/// 5. Copy the version string for Ninja
+///
+/// Example from DEPS:
+/// ```
+/// 'buildtools/linux64': {
+///     'packages': [
+///         {
+///             'package': 'gn/gn/linux-${{arch}}',
+///             'version': 'git_revision:5e19d2fb166fbd4f6f32147fbb2f497091a54ad8',
+///         }
+///     ],
+/// },
+/// ```
+///
+/// These versions should be updated whenever Crashpad submodule is updated
+/// to ensure compatibility with the build configuration.
 const GN_VERSION: &str = "git_revision:5e19d2fb166fbd4f6f32147fbb2f497091a54ad8";
 const NINJA_VERSION: &str = "version:2@1.8.2.chromium.3";
 

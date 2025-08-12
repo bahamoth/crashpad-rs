@@ -49,8 +49,24 @@ impl BuildPhases {
             eprintln!("Ninja: {}", ninja_path.display());
         }
 
-        // Create symlinks/junctions for dependencies
-        self.create_dependency_links()?;
+        // Check if symlinks already exist (created by xtask symlink)
+        let test_link = self
+            .config
+            .crashpad_dir
+            .join("third_party/mini_chromium/mini_chromium");
+
+        if test_link.exists() {
+            // Symlinks already exist, skip creation
+            if self.config.verbose {
+                eprintln!("Dependencies already linked, skipping symlink creation");
+            }
+        } else {
+            // Create symlinks/junctions for dependencies
+            if self.config.verbose {
+                eprintln!("Creating dependency symlinks...");
+            }
+            self.create_dependency_links()?;
+        }
 
         Ok(())
     }
@@ -149,9 +165,7 @@ impl BuildPhases {
             }
 
             // Add handler executable for non-iOS platforms
-            if !self.config.target.contains("android") {
-                cmd.arg("handler:crashpad_handler");
-            }
+            cmd.arg("handler:crashpad_handler");
         }
 
         let status = cmd.status()?;

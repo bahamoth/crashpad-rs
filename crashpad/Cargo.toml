@@ -1,5 +1,5 @@
 [package]
-name = "crashpad"
+name = "crashpad-rs"
 version = { workspace = true }
 authors = { workspace = true }
 edition = { workspace = true }
@@ -8,13 +8,13 @@ repository = { workspace = true }
 rust-version = { workspace = true }
 description = "Safe Rust bindings to Google Crashpad - A crash-reporting system"
 homepage = { workspace = true }
-documentation = { workspace = true }
+documentation = "https://docs.rs/crashpad-rs"
 readme = { workspace = true }
 keywords = { workspace = true }
 categories = { workspace = true }
 
 [dependencies]
-crashpad-sys = { path = "../crashpad-sys", version = "0.1.0" }
+crashpad-rs-sys = { path = "../crashpad-sys", version = "0.1.0" }
 thiserror = { workspace = true }
 
 [dev-dependencies]
@@ -22,3 +22,9 @@ tempfile = "3.8"
 libc = "0.2"
 minidump = "0.26"  # For parsing and verifying crash dumps
 minidump-processor = "0.26"  # For analyzing crash dumps with annotations
+
+[package.metadata.docs.rs]
+# Don't build or show dependencies' documentation
+no-deps = true
+# Build only for the default target to save resources
+targets = ["x86_64-unknown-linux-gnu"]
