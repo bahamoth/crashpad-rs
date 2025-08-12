@@ -133,8 +133,9 @@ jobs:
           arch: ${{ matrix.arch }}
           target: default
           force-avd-creation: false
-          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -no-snapshot
           disable-animations: true
+          disable-spellchecker: true
           script: echo "Generated AVD snapshot for caching."
       
       - name: Create test script
@@ -221,6 +222,10 @@ jobs:
           if [ "${test1_result}" = "FAIL" ] || [ "${test3_result}" = "FAIL" ]; then
             exit 1
           fi
+          
+          # Signal completion - let the action handle cleanup
+          echo ""
+          echo "=== Tests completed successfully ==="
           SCRIPT_EOF
           chmod +x run_android_tests.sh
       
@@ -231,8 +236,9 @@ jobs:
           arch: ${{ matrix.arch }}
           target: default
           force-avd-creation: false
-          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -no-snapshot
           disable-animations: true
+          disable-spellchecker: true
           script: ./run_android_tests.sh
       
       - name: Save Test Results
