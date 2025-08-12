@@ -137,6 +137,93 @@ jobs:
           disable-animations: true
           script: echo "Generated AVD snapshot for caching."
       
+      - name: Create test script
+        run: |
+          cat > run_android_tests.sh << 'SCRIPT_EOF'
+          #!/bin/bash
+          set -e
+          
+          # Wait for device
+          adb wait-for-device
+          adb shell getprop sys.boot_completed | grep 1
+          
+          # Setup directories
+          adb shell mkdir -p /data/local/tmp/crashpad_database
+          adb shell mkdir -p /data/local/tmp/crashpad_metrics
+          
+          # Push binaries
+          adb push target/x86_64-linux-android/release/examples/crashpad_test_cli /data/local/tmp/
+          adb push target/x86_64-linux-android/release/libcrashpad_handler.so /data/local/tmp/
+          
+          # Find and push libc++_shared.so
+          LIBCXX=$(find $ANDROID_NDK_HOME -path "*/x86_64-linux-android/libc++_shared.so" | head -1)
+          if [ -n "$LIBCXX" ]; then
+            adb push "$LIBCXX" /data/local/tmp/
+          else
+            echo "ERROR: Cannot find libc++_shared.so"
+            exit 1
+          fi
+          
+          # Make executables
+          adb shell chmod +x /data/local/tmp/crashpad_test_cli
+          adb shell chmod +x /data/local/tmp/libcrashpad_handler.so
+          
+          # Test 1: Basic initialization
+          echo "=== Test 1: Basic initialization ==="
+          INIT_OUTPUT=$(adb shell "cd /data/local/tmp && LD_LIBRARY_PATH=/data/local/tmp ./crashpad_test_cli 2>&1")
+          echo "$INIT_OUTPUT"
+          if echo "$INIT_OUTPUT" | grep -q "✓ Handler started successfully"; then
+            echo "✅ PASS: Handler initialized successfully"
+            echo "test1_result=PASS" >> test_results.env
+          else
+            echo "❌ FAIL: Handler initialization failed"
+            echo "test1_result=FAIL" >> test_results.env
+            exit 1
+          fi
+          
+          # Test 2: Crash handling
+          echo ""
+          echo "=== Test 2: Crash handling ==="
+          CRASH_OUTPUT=$(adb shell "cd /data/local/tmp && LD_LIBRARY_PATH=/data/local/tmp ./crashpad_test_cli crash 2>&1" || true)
+          echo "$CRASH_OUTPUT"
+          if echo "$CRASH_OUTPUT" | grep -q "Triggering crash now"; then
+            echo "✅ PASS: Crash triggered as expected"
+            echo "test2_result=PASS" >> test_results.env
+          else
+            echo "❌ FAIL: Crash trigger failed"
+            echo "test2_result=FAIL" >> test_results.env
+          fi
+          
+          # Test 3: Verify crash dump generation
+          sleep 2
+          echo ""
+          echo "=== Test 3: Checking for crash dumps ==="
+          adb shell ls -la /data/local/tmp/crashpad_database/ || true
+          DUMP_COUNT=$(adb shell "find /data/local/tmp/crashpad_database -name '*.dmp' 2>/dev/null | wc -l" | tr -d '\r\n')
+          echo "Found $DUMP_COUNT crash dump file(s)"
+          if [ "$DUMP_COUNT" -gt "0" ]; then
+            echo "✅ PASS: Crash dump generated successfully"
+            echo "test3_result=PASS" >> test_results.env
+          else
+            echo "❌ FAIL: No crash dumps found"
+            echo "test3_result=FAIL" >> test_results.env
+          fi
+          
+          # Summary
+          echo ""
+          echo "=== Test Summary ==="
+          source test_results.env 2>/dev/null || true
+          echo "Test 1 (Initialization): ${test1_result:-UNKNOWN}"
+          echo "Test 2 (Crash Trigger): ${test2_result:-UNKNOWN}"
+          echo "Test 3 (Dump Generation): ${test3_result:-UNKNOWN}"
+          
+          # Exit with failure if any test failed
+          if [ "${test1_result}" = "FAIL" ] || [ "${test3_result}" = "FAIL" ]; then
+            exit 1
+          fi
+          SCRIPT_EOF
+          chmod +x run_android_tests.sh
+      
       - name: Run tests on Android Emulator
         uses: reactivecircus/android-emulator-runner@v2
         with:
@@ -146,79 +233,23 @@ jobs:
           force-avd-creation: false
           emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           disable-animations: true
-          script: |
-            set -e
-            adb wait-for-device
-            adb shell getprop sys.boot_completed | grep 1
-            adb shell mkdir -p /data/local/tmp/crashpad_database
-            adb shell mkdir -p /data/local/tmp/crashpad_metrics
-            adb push target/x86_64-linux-android/release/examples/crashpad_test_cli /data/local/tmp/
-            adb push target/x86_64-linux-android/release/libcrashpad_handler.so /data/local/tmp/
-            LIBCXX=$(find $ANDROID_NDK_HOME -path "*/x86_64-linux-android/libc++_shared.so" | head -1) && [ -n "$LIBCXX" ] && adb push "$LIBCXX" /data/local/tmp/ || (echo "ERROR: Cannot find libc++_shared.so" && exit 1)
-            adb shell chmod +x /data/local/tmp/crashpad_test_cli
-            adb shell chmod +x /data/local/tmp/libcrashpad_handler.so
-            
-            # Test 1: Basic initialization
-            echo "=== Test 1: Basic initialization ==="
-            INIT_OUTPUT=$(adb shell "cd /data/local/tmp && LD_LIBRARY_PATH=/data/local/tmp ./crashpad_test_cli 2>&1")
-            echo "$INIT_OUTPUT"
-            if echo "$INIT_OUTPUT" | grep -q "✓ Handler started successfully"; then
-              echo "✅ PASS: Handler initialized successfully"
-              TEST1_RESULT="PASS"
-            else
-              echo "❌ FAIL: Handler initialization failed"
-              TEST1_RESULT="FAIL"
-              exit 1
-            fi
-            
-            # Test 2: Crash handling
-            echo -e "\n=== Test 2: Crash handling ==="
-            CRASH_OUTPUT=$(adb shell "cd /data/local/tmp && LD_LIBRARY_PATH=/data/local/tmp ./crashpad_test_cli crash 2>&1" || true)
-            echo "$CRASH_OUTPUT"
-            CRASH_EXIT_CODE=$?
-            if echo "$CRASH_OUTPUT" | grep -q "Triggering crash now"; then
-              echo "✅ PASS: Crash triggered as expected"
-              TEST2_RESULT="PASS"
-            else
-              echo "❌ FAIL: Crash trigger failed"
-              TEST2_RESULT="FAIL"
-            fi
-            
-            # Test 3: Verify crash dump generation
-            sleep 2
-            echo -e "\n=== Test 3: Checking for crash dumps ==="
-            adb shell ls -la /data/local/tmp/crashpad_database/ || true
-            DUMP_COUNT=$(adb shell "find /data/local/tmp/crashpad_database -name '*.dmp' 2>/dev/null | wc -l" | tr -d '\r\n')
-            echo "Found $DUMP_COUNT crash dump file(s)"
-            if [ "$DUMP_COUNT" -gt "0" ]; then
-              echo "✅ PASS: Crash dump generated successfully"
-              TEST3_RESULT="PASS"
-            else
-              echo "❌ FAIL: No crash dumps found"
-              TEST3_RESULT="FAIL"
-            fi
-            
-            # Summary
-            echo -e "\n=== Test Summary ==="
-            echo "Test 1 (Initialization): $TEST1_RESULT"
-            echo "Test 2 (Crash Trigger): $TEST2_RESULT"
-            echo "Test 3 (Dump Generation): $TEST3_RESULT"
-            
-            # Exit with failure if any test failed
-            if [ "$TEST1_RESULT" = "FAIL" ] || [ "$TEST3_RESULT" = "FAIL" ]; then
-              exit 1
-            fi
+          script: ./run_android_tests.sh
       
       - name: Save Test Results
         if: always()
         run: |
+          # Load test results from previous step
+          if [ -f test_results.env ]; then
+            source test_results.env
+          fi
+          
           cat > test-results.txt <<EOF
           platform: Android
           arch: ${{ matrix.arch }}
           api_level: ${{ matrix.api-level }}
-          test_initialization: ${TEST1_RESULT:-UNKNOWN}
-          test_crash_trigger: ${TEST2_RESULT:-UNKNOWN}
-          test_dump_generation: ${TEST3_RESULT:-UNKNOWN}
+          test_initialization: ${test1_result:-UNKNOWN}
+          test_crash_trigger: ${test2_result:-UNKNOWN}
+          test_dump_generation: ${test3_result:-UNKNOWN}
           timestamp: $(date -u +"%Y-%m-%dT%H:%M:%SZ")
           EOF
           
@@ -243,18 +274,36 @@ jobs:
           echo "| Test Case | Description | Status |" >> $GITHUB_STEP_SUMMARY
           echo "|-----------|-------------|--------|" >> $GITHUB_STEP_SUMMARY
           
-          # Parse test output from previous step to determine results
-          # This is a simplified version - in production would parse actual output
-          if [ "${{ job.status }}" == "success" ]; then
-            echo "| Test 1 | Handler Initialization | ✅ PASS |" >> $GITHUB_STEP_SUMMARY
-            echo "| Test 2 | Crash Trigger | ✅ PASS |" >> $GITHUB_STEP_SUMMARY
-            echo "| Test 3 | Dump Generation | ✅ PASS |" >> $GITHUB_STEP_SUMMARY
+          # Load test results from previous step
+          if [ -f test_results.env ]; then
+            source test_results.env
+          fi
+          
+          # Display actual test results
+          test1_status="${test1_result:-UNKNOWN}"
+          test2_status="${test2_result:-UNKNOWN}"
+          test3_status="${test3_result:-UNKNOWN}"
+          
+          # Format status with emojis
+          format_status() {
+            case "$1" in
+              PASS) echo "✅ PASS" ;;
+              FAIL) echo "❌ FAIL" ;;
+              *) echo "❓ UNKNOWN" ;;
+            esac
+          }
+          
+          echo "| Test 1 | Handler Initialization | $(format_status $test1_status) |" >> $GITHUB_STEP_SUMMARY
+          echo "| Test 2 | Crash Trigger | $(format_status $test2_status) |" >> $GITHUB_STEP_SUMMARY
+          echo "| Test 3 | Dump Generation | $(format_status $test3_status) |" >> $GITHUB_STEP_SUMMARY
+          
+          # Determine overall status
+          if [ "$test1_status" = "PASS" ] && [ "$test2_status" = "PASS" ] && [ "$test3_status" = "PASS" ]; then
             OVERALL_STATUS="✅ All tests passed"
+          elif [ "$test1_status" = "FAIL" ] || [ "$test3_status" = "FAIL" ]; then
+            OVERALL_STATUS="❌ Critical tests failed"
           else
-            echo "| Test 1 | Handler Initialization | ❓ Check logs |" >> $GITHUB_STEP_SUMMARY
-            echo "| Test 2 | Crash Trigger | ❓ Check logs |" >> $GITHUB_STEP_SUMMARY
-            echo "| Test 3 | Dump Generation | ❓ Check logs |" >> $GITHUB_STEP_SUMMARY
-            OVERALL_STATUS="❌ Some tests failed"
+            OVERALL_STATUS="⚠️ Some tests had issues"
           fi
           
           echo "" >> $GITHUB_STEP_SUMMARY

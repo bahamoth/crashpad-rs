@@ -1,6 +1,7 @@
 # Development Guide
 
-This guide covers the development workflow for crashpad-rs, including environment setup, building, testing, and contributing.
+This guide covers the development workflow for crashpad-rs, including environment setup, building, testing, and
+contributing.
 
 ## Table of Contents
 
@@ -19,29 +20,31 @@ This guide covers the development workflow for crashpad-rs, including environmen
 
 - **Rust**: 1.70+ (install via [rustup](https://rustup.rs/))
 - **Git**: For source control and submodules
-- **C++ Compiler**: 
-  - macOS: Xcode Command Line Tools (`xcode-select --install`)
-  - Linux: GCC or Clang (`apt install build-essential`)
-  - Windows: Visual Studio 2019+ or MinGW
+- **C++ Compiler**:
+    - macOS: Xcode Command Line Tools (`xcode-select --install`)
+    - Linux: GCC or Clang (`apt install build-essential`)
+    - Windows: Visual Studio 2019+ or MinGW
 
 > **Note**: Python and depot_tools are no longer required! Git submodules handle all dependencies.
 
 ### Platform-Specific Requirements
 
 #### macOS/iOS
+
 - Xcode (for iOS development)
 - iOS Simulator (comes with Xcode)
 
 #### Android
+
 - Android NDK (r23 or later, despite Crashpad docs saying r21)
 
 > ⚠️ **IMPORTANT: Android NDK Symlink Workaround** ⚠️
-> 
+>
 > **This is a temporary ad-hoc solution!** The issue is in Crashpad's mini_chromium build configuration
 > ([mini_chromium/build/config/BUILD.gn#L481-L497](https://github.com/chromium/mini_chromium/blob/main/build/config/BUILD.gn#L481-L497)).   
 > It looks for archiver tools with incorrect names (e.g. `aarch64-linux-android-ar`).  
-> Until this is fixed upstream, you MUST create these symlinks manually:  
-> 
+> Until this is fixed upstream, you MUST create these symlinks manually:
+>
 > **For NDK r27+ (recommended):**
 > ```bash
 > # ⚠️ REQUIRED: Create symlinks for NDK archiver (temporary workaround)
@@ -53,7 +56,7 @@ This guide covers the development workflow for crashpad-rs, including environmen
 > ln -sf llvm-ar x86_64-linux-android-ar
 > ln -sf llvm-ar i686-linux-android-ar
 > ```
-> 
+>
 > **For NDK r26 and earlier:**
 > ```bash
 > # ⚠️ REQUIRED: Create symlinks for NDK tools (temporary workaround)
@@ -69,8 +72,9 @@ This guide covers the development workflow for crashpad-rs, including environmen
 > ln -sf x86_64-linux-android21-clang++ x86_64-linux-android-clang++
 > ln -sf llvm-ar x86_64-linux-android-ar
 > ```
-> 
+>
 > **Without these symlinks, Android builds WILL FAIL with "ar not found" or "compiler not found" errors!**
+
 - Set environment variables:
   ```bash
   export ANDROID_NDK_HOME=/path/to/android-ndk
@@ -78,6 +82,7 @@ This guide covers the development workflow for crashpad-rs, including environmen
   ```
 
 #### Linux
+
 - Additional packages:
   ```bash
   sudo apt install ninja-build pkg-config libssl-dev
@@ -122,6 +127,7 @@ cargo xtask install-tools
 ```
 
 This installs:
+
 - **cargo-nextest**: Test runner with process isolation (required for Crashpad's global state)
 - **cargo-ndk**: Android cross-compilation helper
 
@@ -167,6 +173,7 @@ cargo clean
 ### What's happening in the Build?
 
 The build system automatically:
+
 1. Downloads GN and Ninja binaries directly from CIPD
 2. Creates symlinks/junctions for submodule dependencies
 3. Configures build with GN
@@ -183,8 +190,9 @@ crashpad-rs uses Git submodules to pin specific versions of native dependencies:
 ### Current Submodule Versions
 
 All dependency versions are managed through Git submodules in `crashpad-sys/third_party/`:
+
 - crashpad
-- mini_chromium  
+- mini_chromium
 - googletest
 - zlib
 - libfuzzer
@@ -210,10 +218,12 @@ git submodule update --remote --merge
 ### Build Tool Versions
 
 GN and Ninja versions are defined in `crashpad-sys/build/tools.rs`:
+
 - GN version is matched to Crashpad's requirements
 - Ninja is downloaded from GitHub releases
 
 These tools are cached in OS-specific cache directories:
+
 - macOS: `~/Library/Caches/crashpad-rs/`
 - Linux: `~/.cache/crashpad-rs/`
 - Windows: `%LOCALAPPDATA%\crashpad-rs\Cache\`
@@ -288,7 +298,8 @@ cargo nextest run
 
 ### Detailed Testing
 
-We use cargo-nextest for integration tests because Crashpad's out-of-process handler requires isolated process execution:
+We use cargo-nextest for integration tests because Crashpad's out-of-process handler requires isolated process
+execution:
 
 ```bash
 # Unit tests only (in src/ files)
@@ -524,11 +535,13 @@ export RUST_BACKTRACE=1
 #### Android NDK Not Found
 
 **Problem**: Build fails with NDK not found
+
 ```
 Android target but NDK not found
 ```
 
 **Solution**: Set NDK environment variables:
+
 ```bash
 export ANDROID_NDK_HOME=/path/to/ndk
 export ANDROID_NDK_ROOT=$ANDROID_NDK_HOME
@@ -538,7 +551,8 @@ export ANDROID_NDK_ROOT=$ANDROID_NDK_HOME
 
 **Problem**: Missing dependencies or build failures
 
-**Solution**: 
+**Solution**:
+
 1. Initialize submodules: `git submodule update --init --recursive`
 2. Clean everything and rebuild: `make clean && cargo build`
 3. Check that symlinks/junctions were created in `crashpad-sys/third_party/crashpad/third_party/`
@@ -555,17 +569,18 @@ export ANDROID_NDK_ROOT=$ANDROID_NDK_HOME
 
 **Problem**: No crash dumps generated
 
-**Solution**: 
+**Solution**:
+
 1. Ensure simulator is running
 2. Check correct device ID
 3. Process intermediate dumps require app restart after crash
 
 ### Platform-Specific Issues
 
-
 #### iOS In-Process Handler
 
-iOS uses an in-process handler (no separate executable). Crashes are captured as intermediate dumps and converted to minidumps on next app launch.
+iOS uses an in-process handler (no separate executable). Crashes are captured as intermediate dumps and converted to
+minidumps on next app launch.
 
 ## Project Structure
 
@@ -602,10 +617,10 @@ crashpad-rs/
 
 The project uses different names for directories and crates.io packages:
 
-| Directory | Package Name | Reason |
-|-----------|-------------|--------|
+| Directory       | Package Name      | Reason                                             |
+|-----------------|-------------------|----------------------------------------------------|
 | `crashpad-sys/` | `crashpad-rs-sys` | Avoids conflict with existing `crashpad-sys` crate |
-| `crashpad/` | `crashpad-rs` | Consistent naming with FFI package |
+| `crashpad/`     | `crashpad-rs`     | Consistent naming with FFI package                 |
 
 ### Publishing Process
 
@@ -614,6 +629,9 @@ The project uses different names for directories and crates.io packages:
    # Create symlinks for Crashpad dependencies
    cargo xtask symlink
    ```
+   **NOTE**: If you build before packaging, symlinks will be automatically generated during the build process, so you
+   don't need to add them again.
+
 
 2. **Package the FFI bindings**:
    ```bash
@@ -651,10 +669,12 @@ This approach ensures the package includes all necessary source files without re
 ### Troubleshooting Package Issues
 
 #### "Source directory was modified" Error
+
 **Problem**: cargo package fails with verification error
 **Solution**: Run `cargo xtask symlink` before packaging
 
 #### Package Size Concerns
+
 The packaged crate includes Crashpad source code and dependencies (~3-4MB compressed).
 This is necessary since Crashpad must be built from source on the target system.
 
@@ -669,6 +689,7 @@ This is necessary since Crashpad must be built from source on the target system.
 ### Commit Message Format
 
 Follow [Conventional Commits](https://www.conventionalcommits.org/):
+
 ```
 feat(ios): add iOS simulator support
 fix(build): resolve MIG linking issue on macOS
