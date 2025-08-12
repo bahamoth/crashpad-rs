@@ -43,11 +43,11 @@ jobs:
 
       - name: Publish Test Results
         if: always() && github.event_name == 'pull_request'
-        uses: EnricoMi/publish-unit-test-result-action@v2
+        uses: dorny/test-reporter@v1
         with:
-          files: target/nextest/ci/junit.xml
-          check_name: macOS Test Results
-          comment_title: '🖥️ macOS Test Results'
+          name: macOS Test Results
+          path: target/nextest/ci/junit.xml
+          reporter: java-junit
 
       - name: Generate Test Summary
         if: always()
