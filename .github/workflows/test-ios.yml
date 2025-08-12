@@ -147,27 +147,33 @@ jobs:
             source test_results.env
           fi
           
+          # Calculate failures
+          FAILURES=0
+          [ "${test1_result}" != "PASS" ] && [ "${test1_result}" != "" ] && FAILURES=$((FAILURES + 1))
+          [ "${test2_result}" != "PASS" ] && [ "${test2_result}" != "" ] && FAILURES=$((FAILURES + 1))
+          [ "${test3_result}" != "PASS" ] && [ "${test3_result}" != "" ] && FAILURES=$((FAILURES + 1))
+          
           # Create JUnit XML
           cat > junit.xml <<EOF
           <?xml version="1.0" encoding="UTF-8"?>
-          <testsuites name="iOS Simulator Tests" tests="3" failures="0" errors="0" time="1.0">
-            <testsuite name="crashpad_ios_simulator" tests="3" failures="0" errors="0" time="1.0">
+          <testsuites name="iOS Simulator Tests" tests="3" failures="$FAILURES" errors="0" time="1.0">
+            <testsuite name="crashpad_ios_simulator" tests="3" failures="$FAILURES" errors="0" time="1.0">
               <testcase name="Handler Initialization" classname="ios_simulator_test" time="0.1">
           EOF
           
-          if [ "${test1_result}" != "PASS" ]; then
+          if [ "${test1_result}" != "PASS" ] && [ "${test1_result}" != "" ]; then
             echo '      <failure message="Handler initialization failed" type="AssertionError"/>' >> junit.xml
           fi
           echo '    </testcase>' >> junit.xml
           
           echo '    <testcase name="Crash Trigger" classname="ios_simulator_test" time="0.2">' >> junit.xml
-          if [ "${test2_result}" != "PASS" ]; then
+          if [ "${test2_result}" != "PASS" ] && [ "${test2_result}" != "" ]; then
             echo '      <failure message="Crash trigger failed" type="AssertionError"/>' >> junit.xml
           fi
           echo '    </testcase>' >> junit.xml
           
           echo '    <testcase name="TAP Mode Tests" classname="ios_simulator_test" time="0.1">' >> junit.xml
-          if [ "${test3_result}" != "PASS" ]; then
+          if [ "${test3_result}" != "PASS" ] && [ "${test3_result}" != "" ]; then
             echo '      <failure message="TAP mode tests failed" type="AssertionError"/>' >> junit.xml
           fi
           echo '    </testcase>' >> junit.xml
@@ -177,7 +183,7 @@ jobs:
           </testsuites>
           EOF
           
-          echo "JUnit XML generated"
+          echo "JUnit XML generated with $FAILURES failures"
 
       - name: Upload Test Results
         if: always()
