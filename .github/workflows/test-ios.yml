@@ -189,11 +189,11 @@ jobs:
 
       - name: Publish Test Results
         if: always() && github.event_name == 'pull_request'
-        uses: EnricoMi/publish-unit-test-result-action@v2
+        uses: dorny/test-reporter@v1
         with:
-          files: junit.xml
-          check_name: iOS Test Results
-          comment_title: '🍎 iOS Test Results'
+          name: iOS Test Results
+          path: junit.xml
+          reporter: java-junit
 
       - name: Shutdown Simulator
         if: always()
