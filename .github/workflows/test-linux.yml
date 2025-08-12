@@ -45,13 +45,14 @@ jobs:
           path: target/nextest/ci/junit.xml
           retention-days: 7
 
-      - name: Publish Test Results
-        if: always() && github.event_name == 'pull_request'
-        uses: EnricoMi/publish-unit-test-result-action@v2
+      - name: Test Report
+        if: always()
+        uses: mikepenz/action-junit-report@v4
         with:
-          files: target/nextest/ci/junit.xml
-          check_name: Linux Test Results
-          comment_title: '🐧 Linux Test Results'
+          report_paths: target/nextest/ci/junit.xml
+          summary: true
+          show_failed: true
+          show_skipped: false
 
       - name: Generate Test Summary
         if: always()
