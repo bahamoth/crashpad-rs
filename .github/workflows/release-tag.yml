@@ -8,6 +8,7 @@ on:
 permissions:
   contents: write
   pull-requests: write
+  issues: write  # Required for creating labels
 
 jobs:
   release:
@@ -23,6 +24,8 @@ jobs:
           # Configuration is in release-please-config.json
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
+          # Use PAT if GITHUB_TOKEN doesn't have enough permissions
+          # token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
       - name: Release Info
         if: ${{ steps.release.outputs.release_created }}
         run: |
