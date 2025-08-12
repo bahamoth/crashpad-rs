@@ -3,6 +3,9 @@ name: Build iOS
 on:
   pull_request:
 
+permissions:
+  pull-requests: write
+
 concurrency:
   group: ios-${{ github.ref }}
   cancel-in-progress: true
@@ -179,6 +182,103 @@ jobs:
         if: always()
         run: |
           xcrun simctl shutdown "$SIMULATOR_ID" || true
+
+      - name: Post PR Comment
+        if: always() && github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            
+            // Read test results
+            let testCount = 0, testPassed = 0, testFailed = 0;
+            let testDetails = {};
+            
+            if (fs.existsSync('test-results.txt')) {
+              const content = fs.readFileSync('test-results.txt', 'utf8');
+              const lines = content.split('\n').filter(l => l.trim());
+              
+              const data = {};
+              let inDetails = false;
+              
+              lines.forEach(line => {
+                if (line.includes(':')) {
+                  const [key, ...valueParts] = line.split(':');
+                  const value = valueParts.join(':').trim();
+                  
+                  if (key.trim() === 'test_details') {
+                    inDetails = true;
+                  } else if (line.startsWith('  - ') && inDetails) {
+                    const [testName, result] = line.substring(4).split(':');
+                    testDetails[testName.trim()] = result.trim();
+                  } else {
+                    data[key.trim()] = value;
+                    if (!line.startsWith('  ')) inDetails = false;
+                  }
+                }
+              });
+              
+              testCount = parseInt(data.test_count || '0');
+              testPassed = parseInt(data.test_passed || '0');
+              testFailed = parseInt(data.test_failed || '0');
+            }
+            
+            // Build comment body
+            const status = testFailed === 0 ? '✅' : '❌';
+            const statusText = testFailed === 0 ? 'Passed' : 'Failed';
+            
+            let body = `## 🍎 iOS Test Results\n\n`;
+            body += `**Status:** ${status} ${statusText}\n`;
+            body += `**Tests:** ${testCount} total, ${testPassed} passed, ${testFailed} failed\n`;
+            body += `**Platform:** iOS Simulator (iPhone)\n\n`;
+            
+            // Show test details
+            if (Object.keys(testDetails).length > 0) {
+              body += `### Test Details\n`;
+              body += `| Test | Result |\n`;
+              body += `|------|--------|\n`;
+              
+              for (const [test, result] of Object.entries(testDetails)) {
+                const icon = result === 'PASS' ? '✅' : result === 'FAIL' ? '❌' : '❓';
+                body += `| ${test.replace(/_/g, ' ')} | ${icon} ${result} |\n`;
+              }
+              body += `\n`;
+            }
+            
+            body += `### Notes\n`;
+            body += `- iOS uses in-process handler (different from desktop platforms)\n`;
+            body += `- Crash dumps are processed on next app launch\n\n`;
+            
+            body += `---\n`;
+            body += `🔗 [View Full Logs](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})\n`;
+            
+            // Find and update or create comment
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            
+            const botComment = comments.find(comment => 
+              comment.user.type === 'Bot' && 
+              comment.body.includes('🍎 iOS Test Results')
+            );
+            
+            if (botComment) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: botComment.id,
+                body: body
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: body
+              });
+            }
 
       - name: Generate Test Summary
         if: always()
