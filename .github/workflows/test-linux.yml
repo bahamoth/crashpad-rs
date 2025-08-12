@@ -2,8 +2,6 @@ name: Build Linux
 
 on:
   pull_request:
-  push:
-    branches: [ main ]
 
 concurrency:
   group: linux-${{ github.ref }}
@@ -34,7 +32,7 @@ jobs:
           cargo build --package crashpad-rs
       - name: test
         run: cargo nextest run --profile ci
-      
+
       - name: Upload Test Results (JUnit)
         if: always()
         uses: actions/upload-artifact@v4
@@ -42,7 +40,7 @@ jobs:
           name: test-results-linux-junit
           path: target/nextest/ci/junit.xml
           retention-days: 7
-      
+
       - name: Generate Test Summary
         if: always()
         run: |
@@ -56,7 +54,7 @@ jobs:
             FAILURES=$(grep -c '<failure' target/nextest/ci/junit.xml || echo "0")
             ERRORS=$(grep -c '<error' target/nextest/ci/junit.xml || echo "0")
             PASSED=$((TESTS - FAILURES - ERRORS))
-            
+          
             echo "### Test Results" >> $GITHUB_STEP_SUMMARY
             echo "| Metric | Value |" >> $GITHUB_STEP_SUMMARY
             echo "|--------|-------|" >> $GITHUB_STEP_SUMMARY
