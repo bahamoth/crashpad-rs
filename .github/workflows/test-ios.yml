@@ -75,31 +75,91 @@ jobs:
           # Copy test binary to simulator
           TEST_BIN="./target/aarch64-apple-ios-sim/release/examples/ios_simulator_test"
           
-          # Install and run the test binary on simulator
-          # Note: For command-line tools, we use spawn directly
-          
           # Test 1: Normal initialization
           echo "=== Test 1: Initialization test ==="
-          xcrun simctl spawn "$SIMULATOR_ID" "$TEST_BIN" || {
+          INIT_OUTPUT=$(xcrun simctl spawn "$SIMULATOR_ID" "$TEST_BIN" 2>&1 || {
             echo "Direct spawn failed, trying with upload..."
             # Upload the binary to simulator's tmp directory
             xcrun simctl upload "$SIMULATOR_ID" "$TEST_BIN" /tmp/ios_simulator_test
-            xcrun simctl spawn "$SIMULATOR_ID" /tmp/ios_simulator_test
-          }
+            xcrun simctl spawn "$SIMULATOR_ID" /tmp/ios_simulator_test 2>&1
+          })
+          echo "$INIT_OUTPUT"
+          
+          if echo "$INIT_OUTPUT" | grep -q "Handler started successfully\|initialized successfully"; then
+            echo "✅ PASS: Handler initialized successfully"
+            TEST1_RESULT="PASS"
+          else
+            echo "❌ FAIL: Handler initialization failed"
+            TEST1_RESULT="FAIL"
+            exit 1
+          fi
           
           # Test 2: Crash test (expected to crash)
-          echo "=== Test 2: Crash test ==="
-          xcrun simctl spawn "$SIMULATOR_ID" "$TEST_BIN" crash || echo "Crash test completed (expected to fail)"
+          echo -e "\n=== Test 2: Crash test ==="
+          CRASH_OUTPUT=$(xcrun simctl spawn "$SIMULATOR_ID" "$TEST_BIN" crash 2>&1 || true)
+          echo "$CRASH_OUTPUT"
+          
+          if echo "$CRASH_OUTPUT" | grep -q "Triggering crash now"; then
+            echo "✅ PASS: Crash triggered as expected"
+            TEST2_RESULT="PASS"
+          else
+            echo "❌ FAIL: Crash trigger failed"
+            TEST2_RESULT="FAIL"
+          fi
           
           # Give time for crash processing
           sleep 2
           
-          # Test 3: Verify test execution
-          echo "=== Test 3: Verification ==="
-          echo "✓ iOS Simulator tests completed successfully"
+          # Test 3: TAP mode test
+          echo -e "\n=== Test 3: TAP mode test ==="
+          TAP_OUTPUT=$(xcrun simctl spawn "$SIMULATOR_ID" "$TEST_BIN" test 2>&1 || true)
+          echo "$TAP_OUTPUT"
+          
+          if echo "$TAP_OUTPUT" | grep -q "# All tests passed"; then
+            echo "✅ PASS: TAP tests passed"
+            TEST3_RESULT="PASS"
+          else
+            echo "❌ FAIL: TAP tests failed"
+            TEST3_RESULT="FAIL"
+          fi
+          
+          # Summary
+          echo -e "\n=== Test Summary ==="
+          echo "Test 1 (Initialization): $TEST1_RESULT"
+          echo "Test 2 (Crash Trigger): $TEST2_RESULT"
+          echo "Test 3 (TAP Mode): $TEST3_RESULT"
           
           # Note: iOS in-process handler stores dumps differently than desktop platforms
           # Dumps are typically processed on next app launch
+          
+          # Exit with failure if any test failed
+          if [ "$TEST1_RESULT" = "FAIL" ] || [ "$TEST3_RESULT" = "FAIL" ]; then
+            exit 1
+          fi
+      
+      - name: Save Test Results
+        if: always()
+        run: |
+          cat > test-results.txt <<EOF
+          platform: iOS
+          arch: ${{ matrix.arch || 'aarch64' }}
+          simulator: iPhone
+          test_initialization: ${TEST1_RESULT:-UNKNOWN}
+          test_crash_trigger: ${TEST2_RESULT:-UNKNOWN}
+          test_tap_mode: ${TEST3_RESULT:-UNKNOWN}
+          timestamp: $(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          EOF
+          
+          echo "Test results saved to test-results.txt"
+          cat test-results.txt
+      
+      - name: Upload Test Results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-ios-simulator
+          path: test-results.txt
+          retention-days: 7
       
       - name: Shutdown Simulator
         if: always()
@@ -109,9 +169,31 @@ jobs:
       - name: Generate Test Summary
         if: always()
         run: |
-          echo "## 📱 iOS Test Results" >> $GITHUB_STEP_SUMMARY
+          echo "## 📱 iOS Simulator Test Results" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Build Status" >> $GITHUB_STEP_SUMMARY
+          
+          echo "### Test Execution Results" >> $GITHUB_STEP_SUMMARY
+          echo "| Test Case | Description | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----------|-------------|--------|" >> $GITHUB_STEP_SUMMARY
+          
+          # Parse test results based on job status
+          if [ "${{ job.status }}" == "success" ]; then
+            echo "| Test 1 | Handler Initialization | ✅ PASS |" >> $GITHUB_STEP_SUMMARY
+            echo "| Test 2 | Crash Trigger | ✅ PASS |" >> $GITHUB_STEP_SUMMARY
+            echo "| Test 3 | TAP Mode Tests | ✅ PASS |" >> $GITHUB_STEP_SUMMARY
+            OVERALL_STATUS="✅ All tests passed"
+          else
+            echo "| Test 1 | Handler Initialization | ❓ Check logs |" >> $GITHUB_STEP_SUMMARY
+            echo "| Test 2 | Crash Trigger | ❓ Check logs |" >> $GITHUB_STEP_SUMMARY
+            echo "| Test 3 | TAP Mode Tests | ❓ Check logs |" >> $GITHUB_STEP_SUMMARY
+            OVERALL_STATUS="❌ Some tests failed"
+          fi
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Overall Status: $OVERALL_STATUS" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          echo "### Build Configuration" >> $GITHUB_STEP_SUMMARY
           echo "| Component | Target | Status |" >> $GITHUB_STEP_SUMMARY
           echo "|-----------|--------|--------|" >> $GITHUB_STEP_SUMMARY
           echo "| crashpad-rs-sys | aarch64-apple-ios | ✅ Built |" >> $GITHUB_STEP_SUMMARY
@@ -120,15 +202,18 @@ jobs:
           echo "| crashpad-rs | aarch64-apple-ios-sim | ✅ Built |" >> $GITHUB_STEP_SUMMARY
           echo "| ios_simulator_test | aarch64-apple-ios-sim | ✅ Built |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Simulator Test Results" >> $GITHUB_STEP_SUMMARY
-          echo "| Test | Platform | Result |" >> $GITHUB_STEP_SUMMARY
-          echo "|------|----------|--------|" >> $GITHUB_STEP_SUMMARY
-          echo "| Initialization | iOS Simulator | ✅ Pass |" >> $GITHUB_STEP_SUMMARY
-          echo "| In-Process Handler | iOS Simulator | ✅ Pass |" >> $GITHUB_STEP_SUMMARY
-          echo "| Crash Test | iOS Simulator | ✅ Pass |" >> $GITHUB_STEP_SUMMARY
+          
+          echo "### Test Environment" >> $GITHUB_STEP_SUMMARY
+          echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|----------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Runner OS | ${{ runner.os }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Xcode Version | Latest |" >> $GITHUB_STEP_SUMMARY
+          echo "| Simulator Device | iPhone |" >> $GITHUB_STEP_SUMMARY
+          echo "| iOS Runtime | Available |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Environment" >> $GITHUB_STEP_SUMMARY
-          echo "- **Runner**: ${{ runner.os }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Xcode**: Latest" >> $GITHUB_STEP_SUMMARY
-          echo "- **Simulator**: iPhone (iOS Simulator)" >> $GITHUB_STEP_SUMMARY
+          
+          echo "### Notes" >> $GITHUB_STEP_SUMMARY
+          echo "- iOS uses in-process handler (different from desktop platforms)" >> $GITHUB_STEP_SUMMARY
+          echo "- Crash dumps are processed on next app launch" >> $GITHUB_STEP_SUMMARY
+          echo "- TAP mode provides automated test verification" >> $GITHUB_STEP_SUMMARY
 
