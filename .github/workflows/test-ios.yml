@@ -187,13 +187,14 @@ jobs:
           path: junit.xml
           retention-days: 7
 
-      - name: Publish Test Results
-        if: always() && github.event_name == 'pull_request'
-        uses: dorny/test-reporter@v1
+      - name: Test Report
+        if: always()
+        uses: mikepenz/action-junit-report@v4
         with:
-          name: iOS Test Results
-          path: junit.xml
-          reporter: java-junit
+          report_paths: junit.xml
+          summary: true
+          show_failed: true
+          show_skipped: false
 
       - name: Shutdown Simulator
         if: always()
