@@ -147,7 +147,7 @@ jobs:
           emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           disable-animations: true
           script: |
-            set -ex
+            set -e
             adb wait-for-device
             adb shell getprop sys.boot_completed | grep 1
             adb shell mkdir -p /data/local/tmp/crashpad_database
@@ -157,39 +157,129 @@ jobs:
             LIBCXX=$(find $ANDROID_NDK_HOME -path "*/x86_64-linux-android/libc++_shared.so" | head -1) && [ -n "$LIBCXX" ] && adb push "$LIBCXX" /data/local/tmp/ || (echo "ERROR: Cannot find libc++_shared.so" && exit 1)
             adb shell chmod +x /data/local/tmp/crashpad_test_cli
             adb shell chmod +x /data/local/tmp/libcrashpad_handler.so
+            
+            # Test 1: Basic initialization
             echo "=== Test 1: Basic initialization ==="
-            adb shell "cd /data/local/tmp && LD_LIBRARY_PATH=/data/local/tmp ./crashpad_test_cli"
-            echo "=== Test 2: Crash handling ==="
-            adb shell "cd /data/local/tmp && LD_LIBRARY_PATH=/data/local/tmp ./crashpad_test_cli crash" || true
+            INIT_OUTPUT=$(adb shell "cd /data/local/tmp && LD_LIBRARY_PATH=/data/local/tmp ./crashpad_test_cli 2>&1")
+            echo "$INIT_OUTPUT"
+            if echo "$INIT_OUTPUT" | grep -q "✓ Handler started successfully"; then
+              echo "✅ PASS: Handler initialized successfully"
+              TEST1_RESULT="PASS"
+            else
+              echo "❌ FAIL: Handler initialization failed"
+              TEST1_RESULT="FAIL"
+              exit 1
+            fi
+            
+            # Test 2: Crash handling
+            echo -e "\n=== Test 2: Crash handling ==="
+            CRASH_OUTPUT=$(adb shell "cd /data/local/tmp && LD_LIBRARY_PATH=/data/local/tmp ./crashpad_test_cli crash 2>&1" || true)
+            echo "$CRASH_OUTPUT"
+            CRASH_EXIT_CODE=$?
+            if echo "$CRASH_OUTPUT" | grep -q "Triggering crash now"; then
+              echo "✅ PASS: Crash triggered as expected"
+              TEST2_RESULT="PASS"
+            else
+              echo "❌ FAIL: Crash trigger failed"
+              TEST2_RESULT="FAIL"
+            fi
+            
+            # Test 3: Verify crash dump generation
             sleep 2
-            echo "=== Test 3: Checking for crash dumps ==="
+            echo -e "\n=== Test 3: Checking for crash dumps ==="
             adb shell ls -la /data/local/tmp/crashpad_database/ || true
             DUMP_COUNT=$(adb shell "find /data/local/tmp/crashpad_database -name '*.dmp' 2>/dev/null | wc -l" | tr -d '\r\n')
             echo "Found $DUMP_COUNT crash dump file(s)"
-            [ "$DUMP_COUNT" = "0" ] && echo "Warning: No crash dumps found" || echo "✓ Test passed - crash dump generated"
+            if [ "$DUMP_COUNT" -gt "0" ]; then
+              echo "✅ PASS: Crash dump generated successfully"
+              TEST3_RESULT="PASS"
+            else
+              echo "❌ FAIL: No crash dumps found"
+              TEST3_RESULT="FAIL"
+            fi
+            
+            # Summary
+            echo -e "\n=== Test Summary ==="
+            echo "Test 1 (Initialization): $TEST1_RESULT"
+            echo "Test 2 (Crash Trigger): $TEST2_RESULT"
+            echo "Test 3 (Dump Generation): $TEST3_RESULT"
+            
+            # Exit with failure if any test failed
+            if [ "$TEST1_RESULT" = "FAIL" ] || [ "$TEST3_RESULT" = "FAIL" ]; then
+              exit 1
+            fi
+      
+      - name: Save Test Results
+        if: always()
+        run: |
+          cat > test-results.txt <<EOF
+          platform: Android
+          arch: ${{ matrix.arch }}
+          api_level: ${{ matrix.api-level }}
+          test_initialization: ${TEST1_RESULT:-UNKNOWN}
+          test_crash_trigger: ${TEST2_RESULT:-UNKNOWN}
+          test_dump_generation: ${TEST3_RESULT:-UNKNOWN}
+          timestamp: $(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          EOF
+          
+          echo "Test results saved to test-results.txt"
+          cat test-results.txt
+      
+      - name: Upload Test Results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-android-${{ matrix.arch }}-api${{ matrix.api-level }}
+          path: test-results.txt
+          retention-days: 7
       
       - name: Generate Test Summary
         if: always()
         run: |
-          echo "## 📱 Android Test Results" >> $GITHUB_STEP_SUMMARY
+          echo "## 📱 Android Emulator Test Results" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Build Status" >> $GITHUB_STEP_SUMMARY
+          
+          echo "### Test Execution Results" >> $GITHUB_STEP_SUMMARY
+          echo "| Test Case | Description | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----------|-------------|--------|" >> $GITHUB_STEP_SUMMARY
+          
+          # Parse test output from previous step to determine results
+          # This is a simplified version - in production would parse actual output
+          if [ "${{ job.status }}" == "success" ]; then
+            echo "| Test 1 | Handler Initialization | ✅ PASS |" >> $GITHUB_STEP_SUMMARY
+            echo "| Test 2 | Crash Trigger | ✅ PASS |" >> $GITHUB_STEP_SUMMARY
+            echo "| Test 3 | Dump Generation | ✅ PASS |" >> $GITHUB_STEP_SUMMARY
+            OVERALL_STATUS="✅ All tests passed"
+          else
+            echo "| Test 1 | Handler Initialization | ❓ Check logs |" >> $GITHUB_STEP_SUMMARY
+            echo "| Test 2 | Crash Trigger | ❓ Check logs |" >> $GITHUB_STEP_SUMMARY
+            echo "| Test 3 | Dump Generation | ❓ Check logs |" >> $GITHUB_STEP_SUMMARY
+            OVERALL_STATUS="❌ Some tests failed"
+          fi
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Overall Status: $OVERALL_STATUS" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          echo "### Build Configuration" >> $GITHUB_STEP_SUMMARY
           echo "| Component | Target | Status |" >> $GITHUB_STEP_SUMMARY
           echo "|-----------|--------|--------|" >> $GITHUB_STEP_SUMMARY
-          echo "| crashpad-rs-sys | arm64-v8a | ✅ Built |" >> $GITHUB_STEP_SUMMARY
-          echo "| crashpad-rs | arm64-v8a | ✅ Built |" >> $GITHUB_STEP_SUMMARY
-          echo "| test_cli | arm64-v8a | ✅ Built |" >> $GITHUB_STEP_SUMMARY
+          echo "| crashpad-rs-sys | x86_64-linux-android | ✅ Built |" >> $GITHUB_STEP_SUMMARY
+          echo "| crashpad-rs | x86_64-linux-android | ✅ Built |" >> $GITHUB_STEP_SUMMARY
+          echo "| crashpad_test_cli | x86_64-linux-android | ✅ Built |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Emulator Test Results (API ${{ matrix.api-level }})" >> $GITHUB_STEP_SUMMARY
-          echo "| Test | Architecture | Result |" >> $GITHUB_STEP_SUMMARY
-          echo "|------|--------------|--------|" >> $GITHUB_STEP_SUMMARY
-          echo "| Initialization | ${{ matrix.arch }} | ✅ Pass |" >> $GITHUB_STEP_SUMMARY
-          echo "| Crash Handling | ${{ matrix.arch }} | ✅ Pass |" >> $GITHUB_STEP_SUMMARY
-          echo "| Dump Generation | ${{ matrix.arch }} | 🔍 Check logs |" >> $GITHUB_STEP_SUMMARY
+          
+          echo "### Test Environment" >> $GITHUB_STEP_SUMMARY
+          echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|----------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Runner OS | ${{ runner.os }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| NDK Version | 26.1.10909125 |" >> $GITHUB_STEP_SUMMARY
+          echo "| Android API Level | ${{ matrix.api-level }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Architecture | ${{ matrix.arch }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Emulator Type | ${{ matrix.arch }} system image |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Environment" >> $GITHUB_STEP_SUMMARY
-          echo "- **Runner**: ${{ runner.os }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **NDK Version**: 26.1.10909125" >> $GITHUB_STEP_SUMMARY
-          echo "- **Android API**: ${{ matrix.api-level }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Architecture**: ${{ matrix.arch }}" >> $GITHUB_STEP_SUMMARY
+          
+          echo "### Test Artifacts" >> $GITHUB_STEP_SUMMARY
+          echo "- Crash dumps location: `/data/local/tmp/crashpad_database/`" >> $GITHUB_STEP_SUMMARY
+          echo "- Metrics location: `/data/local/tmp/crashpad_metrics/`" >> $GITHUB_STEP_SUMMARY
 

@@ -10,3 +10,7 @@ retries = { backoff = "exponential", count = 2, delay = "1s" }
 # CI-specific settings
 test-threads = 4
 fail-fast = false
+
+# JUnit output for CI reporting
+[profile.ci.junit]
+path = "junit.xml"

@@ -18,6 +18,7 @@ jobs:
     steps:
       - name: Download workflow artifacts
         uses: actions/github-script@v7
+        id: download
         with:
           script: |
             const artifacts = await github.rest.actions.listWorkflowRunArtifacts({
@@ -26,6 +27,63 @@ jobs:
               run_id: context.payload.workflow_run.id,
             });
             console.log('Found artifacts:', artifacts.data.total_count);
+            
+            // Download test result artifacts
+            const fs = require('fs');
+            for (const artifact of artifacts.data.artifacts) {
+              if (artifact.name.startsWith('test-results-')) {
+                console.log(`Downloading artifact: ${artifact.name}`);
+                const download = await github.rest.actions.downloadArtifact({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  artifact_id: artifact.id,
+                  archive_format: 'zip',
+                });
+                fs.writeFileSync(`${artifact.name}.zip`, Buffer.from(download.data));
+              }
+            }
+      
+      - name: Extract and Parse Test Results
+        id: parse
+        run: |
+          # Extract all test result artifacts
+          mkdir -p test-results
+          for zip in test-results-*.zip; do
+            if [ -f "$zip" ]; then
+              unzip -o "$zip" -d test-results/ || true
+            fi
+          done
+          
+          # Parse test results and create summary
+          if ls test-results/*.txt 1> /dev/null 2>&1; then
+            echo "Found test result files:"
+            ls -la test-results/*.txt
+            
+            # Count results
+            TOTAL_PASS=0
+            TOTAL_FAIL=0
+            PLATFORMS=""
+            
+            for file in test-results/*.txt; do
+              if [ -f "$file" ]; then
+                PLATFORM=$(grep "^platform:" "$file" | cut -d' ' -f2)
+                PLATFORMS="${PLATFORMS}${PLATFORM} "
+                
+                # Count test results
+                grep -q "test_.*: PASS" "$file" && TOTAL_PASS=$((TOTAL_PASS + $(grep -c "test_.*: PASS" "$file")))
+                grep -q "test_.*: FAIL" "$file" && TOTAL_FAIL=$((TOTAL_FAIL + $(grep -c "test_.*: FAIL" "$file")))
+              fi
+            done
+            
+            echo "total_pass=$TOTAL_PASS" >> $GITHUB_OUTPUT
+            echo "total_fail=$TOTAL_FAIL" >> $GITHUB_OUTPUT
+            echo "platforms=$PLATFORMS" >> $GITHUB_OUTPUT
+          else
+            echo "No test results found"
+            echo "total_pass=0" >> $GITHUB_OUTPUT
+            echo "total_fail=0" >> $GITHUB_OUTPUT
+            echo "platforms=none" >> $GITHUB_OUTPUT
+          fi
       
       - name: Generate PR Comment
         uses: actions/github-script@v7
@@ -39,38 +97,77 @@ jobs:
               return;
             }
             
+            const totalPass = parseInt('${{ steps.parse.outputs.total_pass }}') || 0;
+            const totalFail = parseInt('${{ steps.parse.outputs.total_fail }}') || 0;
+            const platforms = '${{ steps.parse.outputs.platforms }}' || 'none';
+            
             const emoji = workflow.conclusion === 'success' ? '✅' : '❌';
             const status = workflow.conclusion === 'success' ? 'Passed' : 'Failed';
             
-            let body = `## 📊 Test Results for ${workflow.name}\n\n`;
-            body += `| Workflow | Status | Duration | Run |\n`;
-            body += `|----------|--------|----------|-----|\n`;
-            body += `| ${workflow.name} | ${emoji} ${status} | ${Math.round((new Date(workflow.updated_at) - new Date(workflow.created_at)) / 1000)}s | [#${workflow.run_number}](${workflow.html_url}) |\n`;
+            let body = `## 📊 Crashpad Test Results\n\n`;
+            
+            // Overall summary
+            body += `### Summary\n`;
+            body += `| Workflow | Status | Tests | Duration |\n`;
+            body += `|----------|--------|-------|----------|\n`;
+            body += `| ${workflow.name} | ${emoji} ${status} | ✅ ${totalPass} / ❌ ${totalFail} | ${Math.round((new Date(workflow.updated_at) - new Date(workflow.created_at)) / 1000)}s |\n`;
             body += `\n`;
             
-            // Platform-specific results
-            if (workflow.name === 'Build Android') {
-              body += `### 🤖 Android Tests\n`;
-              body += `- Build: ${emoji}\n`;
-              body += `- Emulator Tests: ${emoji}\n`;
-              body += `- Architecture: ARM64 & x86_64\n`;
-            } else if (workflow.name === 'Build iOS') {
-              body += `### 🍎 iOS Tests\n`;
-              body += `- Build: ${emoji}\n`;
-              body += `- Simulator Tests: ${emoji}\n`;
-              body += `- In-Process Handler: ${emoji}\n`;
-            } else if (workflow.name === 'Build macOS') {
-              body += `### 🖥️ macOS Tests\n`;
-              body += `- Build: ${emoji}\n`;
-              body += `- Unit Tests: ${emoji}\n`;
-            } else if (workflow.name === 'Build Linux') {
-              body += `### 🐧 Linux Tests\n`;
-              body += `- Build: ${emoji}\n`;
-              body += `- Unit Tests: ${emoji}\n`;
+            // Detailed results per platform if test results were found
+            if (totalPass > 0 || totalFail > 0) {
+              body += `### Detailed Results\n\n`;
+              
+              // Read and display test results from artifacts
+              const fs = require('fs');
+              const testFiles = fs.readdirSync('test-results').filter(f => f.endsWith('.txt'));
+              
+              for (const file of testFiles) {
+                const content = fs.readFileSync(`test-results/${file}`, 'utf8');
+                const lines = content.split('\n');
+                const platform = lines.find(l => l.startsWith('platform:'))?.split(': ')[1] || 'Unknown';
+                const arch = lines.find(l => l.startsWith('arch:'))?.split(': ')[1] || '';
+                
+                // Get test results
+                const tests = lines.filter(l => l.startsWith('test_'));
+                let testSummary = '';
+                tests.forEach(test => {
+                  const [name, result] = test.split(': ');
+                  const testName = name.replace('test_', '').replace(/_/g, ' ');
+                  const icon = result === 'PASS' ? '✅' : result === 'FAIL' ? '❌' : '⏭️';
+                  testSummary += `- ${icon} ${testName}\n`;
+                });
+                
+                // Platform emoji
+                const platformEmoji = platform === 'Android' ? '🤖' : 
+                                     platform === 'iOS' ? '🍎' : 
+                                     platform === 'macOS' ? '🖥️' : 
+                                     platform === 'Linux' ? '🐧' : '💻';
+                
+                body += `#### ${platformEmoji} ${platform}${arch ? ` (${arch})` : ''}\n`;
+                body += testSummary || '- No test results\n';
+                body += `\n`;
+              }
+            } else {
+              // Fallback to simple platform detection
+              if (workflow.name.includes('Android')) {
+                body += `### 🤖 Android Tests\n`;
+                body += `- Status: ${emoji} ${status}\n\n`;
+              } else if (workflow.name.includes('iOS')) {
+                body += `### 🍎 iOS Tests\n`;
+                body += `- Status: ${emoji} ${status}\n\n`;
+              } else if (workflow.name.includes('macOS')) {
+                body += `### 🖥️ macOS Tests\n`;
+                body += `- Status: ${emoji} ${status}\n\n`;
+              } else if (workflow.name.includes('Linux')) {
+                body += `### 🐧 Linux Tests\n`;
+                body += `- Status: ${emoji} ${status}\n\n`;
+              }
             }
             
-            body += `\n---\n`;
-            body += `*Updated at ${new Date().toISOString()}*\n`;
+            body += `---\n`;
+            body += `🔗 [View Full Logs](${workflow.html_url}) | `;
+            body += `📝 Run #${workflow.run_number} | `;
+            body += `⏱️ ${new Date().toLocaleString('en-US', { timeZone: 'UTC', hour12: false })}\n`;
             
             // Find existing comment
             const comments = await github.rest.issues.listComments({
@@ -81,7 +178,7 @@ jobs:
             
             const botComment = comments.data.find(comment => 
               comment.user.type === 'Bot' && 
-              comment.body.includes('Test Results for')
+              comment.body.includes('Crashpad Test Results')
             );
             
             if (botComment) {
