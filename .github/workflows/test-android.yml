@@ -242,7 +242,7 @@ jobs:
           disable-spellchecker: true
           script: ./run_android_tests.sh
 
-      - name: Save Test Results
+      - name: Generate JUnit XML
         if: always()
         run: |
           # Load test results from previous step
@@ -250,122 +250,53 @@ jobs:
             source test_results.env
           fi
           
-          cat > test-results.txt <<EOF
-          platform: Android
-          arch: ${{ matrix.arch }}
-          api_level: ${{ matrix.api-level }}
-          test_initialization: ${test1_result:-UNKNOWN}
-          test_crash_trigger: ${test2_result:-UNKNOWN}
-          test_dump_generation: ${test3_result:-UNKNOWN}
-          timestamp: $(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          # Create JUnit XML
+          cat > junit.xml <<EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <testsuites name="Android Emulator Tests" tests="3" failures="0" errors="0" time="1.0">
+            <testsuite name="crashpad_android_emulator" tests="3" failures="0" errors="0" time="1.0">
+              <testcase name="Handler Initialization" classname="android_emulator_test" time="0.1">
           EOF
           
-          echo "Test results saved to test-results.txt"
-          cat test-results.txt
+          if [ "${test1_result}" != "PASS" ]; then
+            echo '      <failure message="Handler initialization failed" type="AssertionError"/>' >> junit.xml
+          fi
+          echo '    </testcase>' >> junit.xml
+          
+          echo '    <testcase name="Crash Trigger" classname="android_emulator_test" time="0.2">' >> junit.xml
+          if [ "${test2_result}" != "PASS" ]; then
+            echo '      <failure message="Crash trigger failed" type="AssertionError"/>' >> junit.xml
+          fi
+          echo '    </testcase>' >> junit.xml
+          
+          echo '    <testcase name="Dump Generation" classname="android_emulator_test" time="0.1">' >> junit.xml
+          if [ "${test3_result}" != "PASS" ]; then
+            echo '      <failure message="Dump generation failed" type="AssertionError"/>' >> junit.xml
+          fi
+          echo '    </testcase>' >> junit.xml
+          
+          cat >> junit.xml <<EOF
+            </testsuite>
+          </testsuites>
+          EOF
+          
+          echo "JUnit XML generated"
 
       - name: Upload Test Results
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: test-results-android-${{ matrix.arch }}-api${{ matrix.api-level }}
-          path: test-results.txt
+          path: junit.xml
           retention-days: 7
 
-      - name: Post PR Comment
+      - name: Publish Test Results
         if: always() && github.event_name == 'pull_request'
-        uses: actions/github-script@v7
+        uses: EnricoMi/publish-unit-test-result-action@v2
         with:
-          script: |
-            const fs = require('fs');
-            
-            // Read test results  
-            let testResults = {};
-            
-            if (fs.existsSync('test_results.env')) {
-              const envContent = fs.readFileSync('test_results.env', 'utf8');
-              envContent.split('\n').forEach(line => {
-                if (line.includes('=')) {
-                  const [key, value] = line.split('=');
-                  testResults[key] = value;
-                }
-              });
-            }
-            
-            const test1 = testResults.test1_result || 'UNKNOWN';
-            const test2 = testResults.test2_result || 'UNKNOWN';
-            const test3 = testResults.test3_result || 'UNKNOWN';
-            
-            // Calculate totals
-            const totalTests = 3;
-            let passedTests = 0;
-            let failedTests = 0;
-            
-            [test1, test2, test3].forEach(result => {
-              if (result === 'PASS') passedTests++;
-              else if (result === 'FAIL') failedTests++;
-            });
-            
-            // Build comment body
-            const status = failedTests === 0 ? '✅' : '❌';
-            const statusText = failedTests === 0 ? 'Passed' : 'Failed';
-            
-            let body = `## 🤖 Android Test Results\n\n`;
-            body += `**Status:** ${status} ${statusText}\n`;
-            body += `**Tests:** ${totalTests} total, ${passedTests} passed, ${failedTests} failed\n`;
-            body += `**Platform:** Android Emulator (API ${{ matrix.api-level }}, ${{ matrix.arch }})\n\n`;
-            
-            // Show test details
-            body += `### Test Details\n`;
-            body += `| Test | Description | Result |\n`;
-            body += `|------|-------------|--------|\n`;
-            
-            const formatResult = (result) => {
-              switch(result) {
-                case 'PASS': return '✅ PASS';
-                case 'FAIL': return '❌ FAIL';
-                default: return '❓ UNKNOWN';
-              }
-            };
-            
-            body += `| Test 1 | Handler Initialization | ${formatResult(test1)} |\n`;
-            body += `| Test 2 | Crash Trigger | ${formatResult(test2)} |\n`;
-            body += `| Test 3 | Dump Generation | ${formatResult(test3)} |\n`;
-            body += `\n`;
-            
-            body += `### Test Artifacts\n`;
-            body += `- Crash dumps location: \`/data/local/tmp/crashpad_database/\`\n`;
-            body += `- Metrics location: \`/data/local/tmp/crashpad_metrics/\`\n\n`;
-            
-            body += `---\n`;
-            body += `🔗 [View Full Logs](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})\n`;
-            
-            // Find and update or create comment
-            const { data: comments } = await github.rest.issues.listComments({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-            });
-            
-            const botComment = comments.find(comment => 
-              comment.user.type === 'Bot' && 
-              comment.body.includes('🤖 Android Test Results')
-            );
-            
-            if (botComment) {
-              await github.rest.issues.updateComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                comment_id: botComment.id,
-                body: body
-              });
-            } else {
-              await github.rest.issues.createComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: context.issue.number,
-                body: body
-              });
-            }
+          files: junit.xml
+          check_name: Android Test Results
+          comment_title: '🤖 Android Test Results'
 
       - name: Generate Test Summary
         if: always()
