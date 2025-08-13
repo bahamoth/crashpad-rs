@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.1](https://github.com/bahamoth/crashpad-rs/compare/v0.2.0...v0.2.1) (2025-08-13)
+
+
+### Bug Fixes
+
+* fix version bump ([abfed4a](https://github.com/bahamoth/crashpad-rs/commit/abfed4a87f4a6037f69f98d9c701f1523416e158))
+
 ## [0.2.0](https://github.com/bahamoth/crashpad-rs/compare/v0.1.1...v0.2.0) (2025-08-13)
 
 
