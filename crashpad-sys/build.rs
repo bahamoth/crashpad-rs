@@ -25,10 +25,10 @@ fn main() {
         std::fs::write(
             &bindings_path,
             r#"
-            //! Dummy bindings for docs.rs build
-            //! 
-            //! These are placeholder types to allow documentation generation.
-            //! Real bindings are generated during normal builds.
+            // Dummy bindings for docs.rs build
+            // 
+            // These are placeholder types to allow documentation generation.
+            // Real bindings are generated during normal builds.
             
             use std::os::raw::{c_char, c_void};
             
