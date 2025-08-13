@@ -18,6 +18,10 @@
           "type": "toml",
           "path": "crashpad/Cargo.toml",
           "jsonpath": "$.dependencies.crashpad-rs-sys.version"
+        },
+        {
+          "type": "generic",
+          "path": "README.md"
         }
       ]
     }

@@ -1,9 +1,12 @@
 # crashpad-rs
+<!-- x-release-please-start-version -->
+![Version](https://img.shields.io/badge/version-0.2.2-blue.svg)
+<!-- x-release-please-end -->
 
-[![Build Status](https://github.com/bahamoth/crashpad-rs/workflows/Build%20Android/badge.svg)](https://github.com/bahamoth/crashpad-rs/actions/workflows/build-android.yml)
-[![Build Status](https://github.com/bahamoth/crashpad-rs/workflows/Build%20iOS/badge.svg)](https://github.com/bahamoth/crashpad-rs/actions/workflows/build-ios.yml)
-[![Build Status](https://github.com/bahamoth/crashpad-rs/workflows/Build%20macOS/badge.svg)](https://github.com/bahamoth/crashpad-rs/actions/workflows/build-macos.yml)
-[![Build Status](https://github.com/bahamoth/crashpad-rs/workflows/Build%20Linux/badge.svg)](https://github.com/bahamoth/crashpad-rs/actions/workflows/build-linux.yml)
+[![Build Status](https://github.com/bahamoth/crashpad-rs/workflows/test-android/badge.svg)](https://github.com/bahamoth/crashpad-rs/actions/workflows/test-android.yml)
+[![Build Status](https://github.com/bahamoth/crashpad-rs/workflows/test-ios/badge.svg)](https://github.com/bahamoth/crashpad-rs/actions/workflows/test-ios.yml)
+[![Build Status](https://github.com/bahamoth/crashpad-rs/workflows/test-macos/badge.svg)](https://github.com/bahamoth/crashpad-rs/actions/workflows/test-macos.yml)
+[![Build Status](https://github.com/bahamoth/crashpad-rs/workflows/test-linux/badge.svg)](https://github.com/bahamoth/crashpad-rs/actions/workflows/test-linux.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 Rust bindings for Google Crashpad crash reporting system.
@@ -23,11 +26,10 @@ Rust bindings for Google Crashpad crash reporting system.
 
 ## Features
 
-- **Cross-platform**: macOS, Linux, Windows, iOS, Android
+- **Cross-platform**: macOS, Linux, iOS, Android
 - **Safe API**: Rust-safe wrapper around Crashpad C++ library
 - **Flexible Configuration**: Runtime handler configuration
-- **Zero-copy**: Minimal overhead for crash reporting
-- **Production Ready**: Battle-tested crash reporting solution
+- **(Native)Crash Handler Included**: Native Handler executable built-in
 
 ## Installation
 
@@ -35,7 +37,9 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-crashpad-rs = "0.1"
+# x-release-please-start-version
+crashpad-rs = "0.2.2"
+# x-release-please-end-version
 ```
 
 ## Quick Start
@@ -85,14 +89,12 @@ let config = CrashpadConfig::builder()
 ```rust
 // Full configuration with upload server
 let config = CrashpadConfig::builder()
-.handler_path(std::env::var("CRASHPAD_HANDLER")
-.unwrap_or_else( | _ | "./crashpad_handler".to_string()))
-.database_path("/var/crash/myapp")
-.metrics_path("/var/metrics/myapp")  // Optional: metrics storage
-.url("https://crashes.example.com/api/minidump")
-.rate_limit(true)  // Limit upload frequency
-.compress_uploads(true)  // Compress before uploading
-.build();
+    .handler_path(std::env::var("CRASHPAD_HANDLER")
+        .unwrap_or_else(|_| "./crashpad_handler".to_string()))
+    .database_path("/var/crash/myapp")
+    .metrics_path("/var/metrics/myapp")  // Optional: metrics storage
+    .url("https://crashes.example.com/api/minidump")
+    .build();
 ```
 
 ### Platform-Specific Configuration
@@ -132,30 +134,29 @@ let config = CrashpadConfig::builder()
 ```rust
 // Adjust configuration based on environment
 let config = if cfg!(debug_assertions) {
-// Development: local storage only
-CrashpadConfig::builder()
-.handler_path("./target/debug/crashpad_handler")
-.database_path("./dev_crashes")
-.build()
+    // Development: local storage only
+    CrashpadConfig::builder()
+        .handler_path("./target/debug/crashpad_handler")
+        .database_path("./dev_crashes")
+        .build()
 } else {
-// Production: with upload server
-CrashpadConfig::builder()
-.handler_path("/usr/local/bin/crashpad_handler")
-.database_path("/var/crash/myapp")
-.url("https://crashes.example.com/submit")
-.build()
+    // Production: with upload server
+    CrashpadConfig::builder()
+        .handler_path("/usr/local/bin/crashpad_handler")
+        .database_path("/var/crash/myapp")
+        .url("https://crashes.example.com/submit")
+        .build()
 };
 ```
 
 ## Platform Support
 
-| Platform | Architecture            | Status   | Handler Type        |
-|----------|-------------------------|----------|---------------------|
-| macOS    | x86_64, aarch64         | ✅ Stable | External executable |
-| Linux    | x86_64, aarch64         | ✅ Stable | External executable |
-| Windows  | x86_64                  | ✅ Stable | External executable |
-| iOS      | arm64, x86_64 sim       | ✅ Stable | In-process          |
-| Android  | arm, arm64, x86, x86_64 | ✅ Stable | External/In-process |
+| Platform | Architecture            | Status     | Handler Type        |
+|----------|-------------------------|------------|---------------------|
+| macOS    | x86_64, aarch64         | ✅ Stable   | External executable |
+| Linux    | x86_64, aarch64         | ✅ Stable   | External executable |
+| iOS      | arm64, x86_64 sim       | ✅ Stable   | In-process          |
+| Android  | arm, arm64, x86, x86_64 | ✅ Stable   | External/In-process |
 
 ## Examples
 
@@ -242,6 +243,15 @@ The `crashpad_handler` executable must be available at runtime. Common approache
 - [Architecture](ARCHITECTURE.md) - Technical design decisions
 - [Conventions](CONVENTIONS.md) - Coding standards
 
+## Known Limitations
+
+- **Windows Support**: Not currently available (build system limitation)
+- **Rate Limiting**: Available in Crashpad but not yet exposed in Rust wrapper
+- **Upload Compression**: Available in Crashpad but not yet exposed in Rust wrapper
+- **Handler Update**: No automatic update mechanism for deployed handlers
+
+These features exist in the underlying Crashpad library but haven't been implemented in the Rust wrapper yet. Contributions are welcome!
+
 ## Troubleshooting
 
 ### Handler Not Found
@@ -269,4 +279,3 @@ Contributions are welcome! See [DEVELOPING.md](DEVELOPING.md) for build and test
 
 - **Issues**: [GitHub Issues](https://github.com/bahamoth/crashpad-rs/issues)
 - **Discussions**: [GitHub Discussions](https://github.com/bahamoth/crashpad-rs/discussions)
-- **Security**: Report security vulnerabilities to security@example.com
