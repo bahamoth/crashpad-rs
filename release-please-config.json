@@ -13,6 +13,11 @@
           "type": "toml",
           "path": "Cargo.toml",
           "jsonpath": "$.workspace.package.version"
+        },
+        {
+          "type": "toml",
+          "path": "crashpad/Cargo.toml",
+          "jsonpath": "$.dependencies.crashpad-rs-sys.version"
         }
       ]
     }
