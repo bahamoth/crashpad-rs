@@ -134,10 +134,11 @@ let config = CrashpadConfig::builder()
 ```rust
 // Adjust configuration based on environment
 let config = if cfg!(debug_assertions) {
-    // Development: local storage only
+    // Development: local storage only, no rate limiting
     CrashpadConfig::builder()
         .handler_path("./target/debug/crashpad_handler")
         .database_path("./dev_crashes")
+        .rate_limit(false)  // Disable rate limiting for testing
         .build()
 } else {
     // Production: with upload server
@@ -145,9 +146,39 @@ let config = if cfg!(debug_assertions) {
         .handler_path("/usr/local/bin/crashpad_handler")
         .database_path("/var/crash/myapp")
         .url("https://crashes.example.com/submit")
+        .upload_gzip(true)  // Enable compression (default)
         .build()
 };
 ```
+
+### Handler Arguments Configuration
+
+```rust
+// Control handler behavior with high-level API
+let config = CrashpadConfig::builder()
+    .database_path("./crashes")
+    .rate_limit(false)              // Disable upload rate limiting
+    .upload_gzip(false)             // Disable gzip compression
+    .periodic_tasks(false)          // Disable periodic maintenance
+    .identify_client_via_url(false) // Don't add client ID to URL
+    .build();
+
+// Advanced: use low-level API for custom arguments
+let config = CrashpadConfig::builder()
+    .database_path("./crashes")
+    .handler_argument("--monitor-self")  // Enable self-monitoring
+    .handler_argument("--monitor-self-annotation=version=1.0")
+    .build();
+
+// Mix high-level and low-level APIs
+let config = CrashpadConfig::builder()
+    .database_path("./crashes")
+    .rate_limit(false)  // High-level API
+    .handler_argument("--monitor-self")  // Low-level API
+    .build();
+```
+
+**Note**: Handler arguments are currently ignored on iOS/tvOS/watchOS as they use an in-process handler with hardcoded settings. This may change in future Crashpad versions.
 
 ## Platform Support
 
@@ -246,11 +277,10 @@ The `crashpad_handler` executable must be available at runtime. Common approache
 ## Known Limitations
 
 - **Windows Support**: Not currently available (build system limitation)
-- **Rate Limiting**: Available in Crashpad but not yet exposed in Rust wrapper
-- **Upload Compression**: Available in Crashpad but not yet exposed in Rust wrapper
+- **iOS Handler Arguments**: Handler arguments are ignored on iOS/tvOS/watchOS as the in-process handler uses hardcoded settings (Crashpad limitation, see [bug #23](https://crashpad.chromium.org/bug/23))
 - **Handler Update**: No automatic update mechanism for deployed handlers
 
-These features exist in the underlying Crashpad library but haven't been implemented in the Rust wrapper yet. Contributions are welcome!
+Contributions are welcome!
 
 ## Troubleshooting
 

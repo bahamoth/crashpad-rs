@@ -28,7 +28,9 @@ bool crashpad_client_start_handler(
     const char* url,
     const char** annotations_keys,
     const char** annotations_values,
-    size_t annotations_count);
+    size_t annotations_count,
+    const char** extra_arguments,
+    size_t extra_arguments_count);
 
 // Set handler IPC pipe (for Windows)
 #ifdef _WIN32

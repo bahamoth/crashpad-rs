@@ -11,6 +11,7 @@ pub struct CrashpadConfig {
     database_path: PathBuf,
     metrics_path: PathBuf,
     url: Option<String>,
+    handler_arguments: Vec<String>,
 }
 
 impl Default for CrashpadConfig {
@@ -25,6 +26,7 @@ impl Default for CrashpadConfig {
             database_path: exe_dir.join("crashpad_db"),
             metrics_path: exe_dir.join("crashpad_metrics"),
             url: None,
+            handler_arguments: Vec::new(),
         }
     }
 }
@@ -138,6 +140,10 @@ impl CrashpadConfig {
     pub(crate) fn url(&self) -> Option<&str> {
         self.url.as_deref()
     }
+
+    pub(crate) fn handler_arguments(&self) -> &[String] {
+        &self.handler_arguments
+    }
 }
 
 /// Builder for CrashpadConfig
@@ -168,6 +174,118 @@ impl CrashpadConfigBuilder {
     /// Set the upload URL
     pub fn url<S: Into<String>>(mut self, url: S) -> Self {
         self.config.url = Some(url.into());
+        self
+    }
+
+    /// Control upload rate limiting
+    ///
+    /// Limits crash report uploads to one per hour when enabled.
+    ///
+    /// # Platform Behavior
+    /// - **Desktop/Linux/Android**: Passed as handler process argument
+    /// - **iOS/tvOS/watchOS**: Currently ignored (hardcoded to false in Crashpad)
+    ///
+    /// # Default
+    /// `true` - Rate limiting enabled
+    pub fn rate_limit(mut self, enabled: bool) -> Self {
+        if !enabled {
+            self.config
+                .handler_arguments
+                .push("--no-rate-limit".to_string());
+        }
+        self
+    }
+
+    /// Control gzip compression for uploads
+    ///
+    /// # Platform Behavior
+    /// - **Desktop/Linux/Android**: Passed as handler process argument
+    /// - **iOS/tvOS/watchOS**: Currently ignored (hardcoded to true in Crashpad)
+    ///
+    /// # Default
+    /// `true` - Gzip compression enabled
+    pub fn upload_gzip(mut self, enabled: bool) -> Self {
+        if !enabled {
+            self.config
+                .handler_arguments
+                .push("--no-upload-gzip".to_string());
+        }
+        self
+    }
+
+    /// Control periodic database maintenance tasks
+    ///
+    /// # Platform Behavior
+    /// - **Desktop/Linux/Android**: Passed as handler process argument
+    /// - **iOS/tvOS/watchOS**: Currently ignored (uses internal pruning thread)
+    ///
+    /// # Default
+    /// `true` - Periodic tasks enabled
+    pub fn periodic_tasks(mut self, enabled: bool) -> Self {
+        if !enabled {
+            self.config
+                .handler_arguments
+                .push("--no-periodic-tasks".to_string());
+        }
+        self
+    }
+
+    /// Control client identification via URL
+    ///
+    /// # Platform Behavior
+    /// - **Desktop/Linux/Android**: Passed as handler process argument
+    /// - **iOS/tvOS/watchOS**: Currently ignored (hardcoded to true in Crashpad)
+    ///
+    /// # Default
+    /// `true` - Client identification enabled
+    pub fn identify_client_via_url(mut self, enabled: bool) -> Self {
+        if !enabled {
+            self.config
+                .handler_arguments
+                .push("--no-identify-client-via-url".to_string());
+        }
+        self
+    }
+
+    /// Add a custom handler argument (advanced usage)
+    ///
+    /// # Platform Behavior
+    /// - **Desktop/Linux/Android**: Passed to handler process
+    /// - **iOS/tvOS/watchOS**: Ignored
+    ///
+    /// # Example
+    /// ```rust
+    /// # use crashpad_rs::CrashpadConfig;
+    /// let config = CrashpadConfig::builder()
+    ///     .handler_argument("--monitor-self")
+    ///     .build();
+    /// ```
+    pub fn handler_argument<S: Into<String>>(mut self, arg: S) -> Self {
+        self.config.handler_arguments.push(arg.into());
+        self
+    }
+
+    /// Add multiple handler arguments (advanced usage)
+    ///
+    /// # Platform Behavior
+    /// - **Desktop/Linux/Android**: Passed to handler process
+    /// - **iOS/tvOS/watchOS**: Ignored
+    ///
+    /// # Example
+    /// ```rust
+    /// # use crashpad_rs::CrashpadConfig;
+    /// let config = CrashpadConfig::builder()
+    ///     .handler_arguments(vec!["--monitor-self", "--no-rate-limit"])
+    ///     .build();
+    /// ```
+    pub fn handler_arguments<I, S>(mut self, args: I) -> Self
+    where
+        I: IntoIterator<Item = S>,
+        S: Into<String>,
+    {
+        self.config
+            .handler_arguments
+            .extend(args.into_iter().map(Into::into));
         self
     }
 
@@ -253,5 +371,76 @@ mod tests {
         } else {
             env::remove_var("CRASHPAD_HANDLER");
         }
+    }
+
+    #[test]
+    fn test_handler_arguments_high_level() {
+        // Test high-level API methods
+        let config = CrashpadConfig::builder()
+            .rate_limit(false)
+            .upload_gzip(false)
+            .periodic_tasks(false)
+            .identify_client_via_url(false)
+            .build();
+
+        assert!(config
+            .handler_arguments
+            .contains(&"--no-rate-limit".to_string()));
+        assert!(config
+            .handler_arguments
+            .contains(&"--no-upload-gzip".to_string()));
+        assert!(config
+            .handler_arguments
+            .contains(&"--no-periodic-tasks".to_string()));
+        assert!(config
+            .handler_arguments
+            .contains(&"--no-identify-client-via-url".to_string()));
+    }
+
+    #[test]
+    fn test_handler_arguments_low_level() {
+        // Test low-level API methods
+        let config = CrashpadConfig::builder()
+            .handler_argument("--monitor-self")
+            .handler_arguments(vec!["--arg1", "--arg2"])
+            .build();
+
+        assert!(config
+            .handler_arguments
+            .contains(&"--monitor-self".to_string()));
+        assert!(config.handler_arguments.contains(&"--arg1".to_string()));
+        assert!(config.handler_arguments.contains(&"--arg2".to_string()));
+    }
+
+    #[test]
+    fn test_handler_arguments_mixed() {
+        // Test mixing high-level and low-level APIs
+        let config = CrashpadConfig::builder()
+            .rate_limit(false)
+            .handler_argument("--monitor-self")
+            .upload_gzip(true) // Enabled, should not add argument
+            .handler_argument("--monitor-self-annotation=test=value")
+            .build();
+
+        assert!(config
+            .handler_arguments
+            .contains(&"--no-rate-limit".to_string()));
+        assert!(config
+            .handler_arguments
+            .contains(&"--monitor-self".to_string()));
+        assert!(config
+            .handler_arguments
+            .contains(&"--monitor-self-annotation=test=value".to_string()));
+        // Should NOT contain --no-upload-gzip since upload_gzip(true)
+        assert!(!config
+            .handler_arguments
+            .contains(&"--no-upload-gzip".to_string()));
+    }
+
+    #[test]
+    fn test_handler_arguments_default() {
+        // Test that default config has no handler arguments
+        let config = CrashpadConfig::default();
+        assert!(config.handler_arguments.is_empty());
     }
 }
