@@ -45,6 +45,10 @@ impl CrashpadClient {
                 std::fs::create_dir_all(parent)?;
             }
 
+            // Note: handler_arguments are ignored on iOS as the in-process handler
+            // has hardcoded settings. This may change in future Crashpad versions.
+            // See https://crashpad.chromium.org/bug/23
+
             // For iOS, start in-process handler
             self.start_in_process_handler(database_path, metrics_path, url, annotations)
         }
@@ -58,6 +62,7 @@ impl CrashpadClient {
             let database_path = config.database_path();
             let metrics_path = config.metrics_path();
             let url = config.url();
+            let handler_arguments = config.handler_arguments();
 
             // Ensure directories exist
             if let Some(parent) = database_path.parent() {
@@ -67,7 +72,14 @@ impl CrashpadClient {
                 std::fs::create_dir_all(parent)?;
             }
 
-            self.start_handler(&handler_path, database_path, metrics_path, url, annotations)
+            self.start_handler_with_arguments(
+                &handler_path,
+                database_path,
+                metrics_path,
+                url,
+                annotations,
+                handler_arguments,
+            )
         }
     }
 
@@ -86,6 +98,35 @@ impl CrashpadClient {
         metrics_path: &Path,
         url: Option<&str>,
         annotations: &HashMap<String, String>,
+    ) -> Result<()> {
+        // Call with empty handler arguments for backward compatibility
+        self.start_handler_with_arguments(
+            handler_path,
+            database_path,
+            metrics_path,
+            url,
+            annotations,
+            &[],
+        )
+    }
+
+    /// Starts the Crashpad handler process with custom arguments.
+    ///
+    /// # Arguments
+    /// * `handler_path` - Path to the Crashpad handler executable
+    /// * `database_path` - Path where crash dumps will be stored
+    /// * `metrics_path` - Path for metrics data (can be empty)
+    /// * `url` - URL to upload crash reports to (can be None for local-only)
+    /// * `annotations` - Key-value pairs to include with crash reports
+    /// * `handler_arguments` - Additional command-line arguments for the handler process
+    fn start_handler_with_arguments(
+        &self,
+        handler_path: &Path,
+        database_path: &Path,
+        metrics_path: &Path,
+        url: Option<&str>,
+        annotations: &HashMap<String, String>,
+        handler_arguments: &[String],
     ) -> Result<()> {
         // Convert paths to C strings
         let handler_path_c = path_to_cstring(handler_path)?;
@@ -118,6 +159,21 @@ impl CrashpadClient {
         let values_ptrs: Vec<*const std::os::raw::c_char> =
             values.iter().map(|v| v.as_ptr()).collect();
 
+        // Convert handler arguments to C strings
+        let handler_args: Vec<CString> = handler_arguments
+            .iter()
+            .map(|arg| {
+                CString::new(arg.as_str()).map_err(|_| {
+                    CrashpadError::InvalidConfiguration(
+                        "Handler argument contains null byte".to_string(),
+                    )
+                })
+            })
+            .collect::<Result<Vec<_>>>()?;
+
+        let handler_args_ptrs: Vec<*const std::os::raw::c_char> =
+            handler_args.iter().map(|arg| arg.as_ptr()).collect();
+
         let success = unsafe {
             crashpad_client_start_handler(
                 self.handle,
@@ -128,6 +184,12 @@ impl CrashpadClient {
                 keys_ptrs.as_ptr() as *mut *const std::os::raw::c_char,
                 values_ptrs.as_ptr() as *mut *const std::os::raw::c_char,
                 annotations.len(),
+                if handler_args_ptrs.is_empty() {
+                    ptr::null_mut()
+                } else {
+                    handler_args_ptrs.as_ptr() as *mut *const std::os::raw::c_char
+                },
+                handler_args_ptrs.len(),
             )
         };
 

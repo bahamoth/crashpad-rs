@@ -24,7 +24,9 @@ bool crashpad_client_start_handler(
     const char* url,
     const char** annotations_keys,
     const char** annotations_values,
-    size_t annotations_count) {
+    size_t annotations_count,
+    const char** extra_arguments,
+    size_t extra_arguments_count) {
     
     auto* crashpad_client = static_cast<CrashpadClient*>(client);
     
@@ -40,6 +42,16 @@ bool crashpad_client_start_handler(
     }
     
     std::vector<std::string> arguments;
+    
+    // Add extra arguments from caller
+    if (extra_arguments != nullptr) {
+        for (size_t i = 0; i < extra_arguments_count; i++) {
+            if (extra_arguments[i]) {
+                arguments.push_back(extra_arguments[i]);
+            }
+        }
+    }
+    
     bool restartable = true;
     // Linux doesn't support asynchronous start
     #ifdef __linux__

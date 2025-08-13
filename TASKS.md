@@ -64,7 +64,7 @@ Copy this template and increment the ID:
 | T-004 | Implement Android NDK cross-compilation tests | DONE   | - | CROSS_COMPILE.md | Android support added but needs testing |
 | T-005 | Add CI/CD pipeline with GitHub Actions | DONE   | dev-codex | - | Build and test on all supported platforms |
 | T-006 | Refactor crashpad-sys build system for platform consistency | DONE   | architect-thor | build_refactor_plan.md | Unify platform-specific build configurations, fix compiler/linker mismatches |
-| T-007 | Implement flexible handler arguments API | TODO | architect-loki | handler-arguments-api-plan.md, R-009 | Add generic FFI support for passing any arguments to handler process |
+| T-007 | Implement flexible handler arguments API | DONE | architect-loki | handler-arguments-api-plan.md, R-009 | Add generic FFI support for passing any arguments to handler process |
 
 ### Task Assignment History
 
