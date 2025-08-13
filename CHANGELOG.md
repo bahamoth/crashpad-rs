@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.2](https://github.com/bahamoth/crashpad-rs/compare/v0.2.1...v0.2.2) (2025-08-13)
+
+
+### Bug Fixes
+
+* **build:** fix docs.rs build failure ([d3e60d4](https://github.com/bahamoth/crashpad-rs/commit/d3e60d4a0e994dd32e6fc8176c917eadc1840622))
+
 ## [0.2.1](https://github.com/bahamoth/crashpad-rs/compare/v0.2.0...v0.2.1) (2025-08-13)
 
 
