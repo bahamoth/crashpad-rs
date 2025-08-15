@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.3](https://github.com/bahamoth/crashpad-rs/compare/v0.2.2...v0.2.3) (2025-08-15)
+
+
+### Features
+
+* add handler arguments API for crashpad configuration ([32af425](https://github.com/bahamoth/crashpad-rs/commit/32af425f58f5faf3891630d1f2fe7562dd3df4ef))
+
 ## [0.2.2](https://github.com/bahamoth/crashpad-rs/compare/v0.2.1...v0.2.2) (2025-08-13)
 
 

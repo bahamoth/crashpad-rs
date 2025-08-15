@@ -1,6 +1,6 @@
 # crashpad-rs
 <!-- x-release-please-start-version -->
-![Version](https://img.shields.io/badge/version-0.2.2-blue.svg)
+![Version](https://img.shields.io/badge/version-0.2.3)
 <!-- x-release-please-end -->
 
 [![Build Status](https://github.com/bahamoth/crashpad-rs/workflows/test-android/badge.svg)](https://github.com/bahamoth/crashpad-rs/actions/workflows/test-android.yml)
@@ -38,7 +38,7 @@ Add to your `Cargo.toml`:
 ```toml
 [dependencies]
 # x-release-please-start-version
-crashpad-rs = "0.2.2"
+crashpad-rs = "0.2.3"
 # x-release-please-end-version
 ```
 
