@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.5](https://github.com/bahamoth/crashpad-rs/compare/v0.2.4...v0.2.5) (2025-08-16)
+
+
+### Bug Fixes
+
+* **docs:** fix release-please pattern and restore version badge format ([244e91a](https://github.com/bahamoth/crashpad-rs/commit/244e91a153adabf2070b17790297723ae9180d5b))
+
 ## [0.2.4](https://github.com/bahamoth/crashpad-rs/compare/v0.2.3...v0.2.4) (2025-08-16)
 
 
