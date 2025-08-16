@@ -1,4 +1,4 @@
-name: Build iOS
+name: Test iOS
 
 on:
   pull_request:
