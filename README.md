@@ -3,10 +3,10 @@
 ![Version](https://img.shields.io/badge/version-0.2.3)
 <!-- x-release-please-end -->
 
-[![Build Status](https://github.com/bahamoth/crashpad-rs/workflows/test-android/badge.svg)](https://github.com/bahamoth/crashpad-rs/actions/workflows/test-android.yml)
-[![Build Status](https://github.com/bahamoth/crashpad-rs/workflows/test-ios/badge.svg)](https://github.com/bahamoth/crashpad-rs/actions/workflows/test-ios.yml)
-[![Build Status](https://github.com/bahamoth/crashpad-rs/workflows/test-macos/badge.svg)](https://github.com/bahamoth/crashpad-rs/actions/workflows/test-macos.yml)
-[![Build Status](https://github.com/bahamoth/crashpad-rs/workflows/test-linux/badge.svg)](https://github.com/bahamoth/crashpad-rs/actions/workflows/test-linux.yml)
+[![Build Status](https://github.com/bahamoth/crashpad-rs/actions/workflows/test-android.yml/badge.svg)](https://github.com/bahamoth/crashpad-rs/actions/workflows/test-android.yml)
+[![Build Status](https://github.com/bahamoth/crashpad-rs/actions/workflows/test-ios.yml/badge.svg)](https://github.com/bahamoth/crashpad-rs/actions/workflows/test-ios.yml)
+[![Build Status](https://github.com/bahamoth/crashpad-rs/actions/workflows/test-macos.yml/badge.svg)](https://github.com/bahamoth/crashpad-rs/actions/workflows/test-macos.yml)
+[![Build Status](https://github.com/bahamoth/crashpad-rs/actions/workflows/test-linux.yml/badge.svg)](https://github.com/bahamoth/crashpad-rs/actions/workflows/test-linux.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 Rust bindings for Google Crashpad crash reporting system.
@@ -265,14 +265,14 @@ The `crashpad_handler` executable must be available at runtime. Common approache
 ### For Library Users
 
 - [API Documentation](https://docs.rs/crashpad-rs) - Full API reference
-- [Integration Guide](CONVENTIONS.md#integration) - Production integration
-- [Platform Notes](CONVENTIONS.md#platform-specific-integration) - Platform-specific considerations
+- [Integration Guide](https://github.com/bahamoth/crashpad-rs/blob/main/CONVENTIONS.md#integration) - Production integration
+- [Platform Notes](https://github.com/bahamoth/crashpad-rs/blob/main/CONVENTIONS.md#platform-specific-integration) - Platform-specific considerations
 
 ### For Contributors
 
-- [Development Guide](DEVELOPING.md) - Build, test, and contribute
-- [Architecture](ARCHITECTURE.md) - Technical design decisions
-- [Conventions](CONVENTIONS.md) - Coding standards
+- [Development Guide](https://github.com/bahamoth/crashpad-rs/blob/main/DEVELOPING.md) - Build, test, and contribute
+- [Architecture](https://github.com/bahamoth/crashpad-rs/blob/main/ARCHITECTURE.md) - Technical design decisions
+- [Conventions](https://github.com/bahamoth/crashpad-rs/blob/main/CONVENTIONS.md) - Coding standards
 
 ## Known Limitations
 
@@ -303,7 +303,7 @@ Licensed under MIT license ([LICENSE](LICENSE)).
 
 ## Contributing
 
-Contributions are welcome! See [DEVELOPING.md](DEVELOPING.md) for build and test instructions.
+Contributions are welcome! See [DEVELOPING.md](https://github.com/bahamoth/crashpad-rs/blob/main/DEVELOPING.md) for build and test instructions.
 
 ## Support
 
