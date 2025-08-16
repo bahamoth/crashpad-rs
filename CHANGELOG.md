@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.2.4](https://github.com/bahamoth/crashpad-rs/compare/v0.2.3...v0.2.4) (2025-08-16)
+
+
+### Bug Fixes
+
+* **docs:** add missing color suffix to version badge URL ([d84ea10](https://github.com/bahamoth/crashpad-rs/commit/d84ea10abeddaec0306cbcdcf0a606367425ab75))
+* **docs:** correct GitHub Actions badge URLs and use absolute paths for documentation links ([498553c](https://github.com/bahamoth/crashpad-rs/commit/498553c049088db6aba1b661dfbedf37d38bf02d))
+
 ## [0.2.3](https://github.com/bahamoth/crashpad-rs/compare/v0.2.2...v0.2.3) (2025-08-15)
 
 
