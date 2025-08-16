@@ -21,7 +21,18 @@
         },
         {
           "type": "generic",
-          "path": "README.md"
+          "path": "README.md",
+          "glob": "README.md",
+          "updateLine": [
+            {
+              "pattern": "badge/version-([0-9]+\\.[0-9]+\\.[0-9]+)",
+              "replacement": "badge/version-${version}"
+            },
+            {
+              "pattern": "crashpad-rs = \"([0-9]+\\.[0-9]+\\.[0-9]+)\"",
+              "replacement": "crashpad-rs = \"${version}\""
+            }
+          ]
         }
       ]
     }
