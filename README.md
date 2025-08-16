@@ -1,6 +1,6 @@
 # crashpad-rs
 <!-- x-release-please-start-version -->
-![Version](https://img.shields.io/badge/version-0.2.3)
+![Version](https://img.shields.io/badge/version-0.2.3-blue.svg)
 <!-- x-release-please-end -->
 
 [![Build Status](https://github.com/bahamoth/crashpad-rs/actions/workflows/test-android.yml/badge.svg)](https://github.com/bahamoth/crashpad-rs/actions/workflows/test-android.yml)
