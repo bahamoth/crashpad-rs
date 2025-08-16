@@ -1,8 +1,10 @@
 # crashpad-rs
+
 <!-- x-release-please-start-version -->
 ![Version](https://img.shields.io/badge/version-0.2.3-blue.svg)
 <!-- x-release-please-end -->
-
+[![docs.rs](https://docs.rs/crashpad-rs/badge.svg)](https://docs.rs/crashpad-rs)
+[![crates.io](https://img.shields.io/crates/d/crashpad-rs.svg)](https://crates.io/crates/crashpad-rs)
 [![Build Status](https://github.com/bahamoth/crashpad-rs/actions/workflows/test-android.yml/badge.svg)](https://github.com/bahamoth/crashpad-rs/actions/workflows/test-android.yml)
 [![Build Status](https://github.com/bahamoth/crashpad-rs/actions/workflows/test-ios.yml/badge.svg)](https://github.com/bahamoth/crashpad-rs/actions/workflows/test-ios.yml)
 [![Build Status](https://github.com/bahamoth/crashpad-rs/actions/workflows/test-macos.yml/badge.svg)](https://github.com/bahamoth/crashpad-rs/actions/workflows/test-macos.yml)
@@ -17,7 +19,6 @@ Rust bindings for Google Crashpad crash reporting system.
 |-----------------|-------------------|------------------------------------------------|
 | `crashpad-sys/` | `crashpad-rs-sys` | Low-level FFI bindings to Crashpad C++ library |
 | `crashpad/`     | `crashpad-rs`     | Safe Rust wrapper API                          |
-| `xtask/`        | -                 | Development automation (not published)         |
 
 **Note**: The directories are published with different names to avoid conflicts on crates.io:
 
