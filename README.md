@@ -1,7 +1,7 @@
 # crashpad-rs
 
 <!-- x-release-please-start-version -->
-![Version](https://img.shields.io/badge/version-0.2.4-blue.svg)
+![Version](https://img.shields.io/badge/version-0.2.5)
 <!-- x-release-please-end-version -->
 [![docs.rs](https://docs.rs/crashpad-rs/badge.svg)](https://docs.rs/crashpad-rs)
 [![crates.io](https://img.shields.io/crates/d/crashpad-rs.svg)](https://crates.io/crates/crashpad-rs)
@@ -39,7 +39,7 @@ Add to your `Cargo.toml`:
 ```toml
 [dependencies]
 # x-release-please-start-version
-crashpad-rs = "0.2.4"
+crashpad-rs = "0.2.5"
 # x-release-please-end-version
 ```
 
