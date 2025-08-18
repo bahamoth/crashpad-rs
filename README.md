@@ -1,6 +1,6 @@
 # crashpad-rs
 
-![Version](https://img.shields.io/badge/version-0.2.4-blue.svg)
+![Version](https://img.shields.io/badge/version-<!-- x-release-please-version -->0.2.4<!-- x-release-please-end -->-blue.svg)
 [![docs.rs](https://docs.rs/crashpad-rs/badge.svg)](https://docs.rs/crashpad-rs)
 [![crates.io](https://img.shields.io/crates/d/crashpad-rs.svg)](https://crates.io/crates/crashpad-rs)
 [![Build Status](https://github.com/bahamoth/crashpad-rs/actions/workflows/test-android.yml/badge.svg)](https://github.com/bahamoth/crashpad-rs/actions/workflows/test-android.yml)
