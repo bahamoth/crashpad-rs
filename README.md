@@ -1,6 +1,6 @@
 # crashpad-rs
 
-![Version](https://img.shields.io/badge/version-<!-- x-release-please-version -->0.2.4<!-- x-release-please-end -->-blue.svg)
+![Version](https://img.shields.io/github/v/release/bahamoth/crashpad-rs?color=blue)
 [![docs.rs](https://docs.rs/crashpad-rs/badge.svg)](https://docs.rs/crashpad-rs)
 [![crates.io](https://img.shields.io/crates/d/crashpad-rs.svg)](https://crates.io/crates/crashpad-rs)
 [![Build Status](https://github.com/bahamoth/crashpad-rs/actions/workflows/test-android.yml/badge.svg)](https://github.com/bahamoth/crashpad-rs/actions/workflows/test-android.yml)
@@ -88,12 +88,12 @@ let config = CrashpadConfig::builder()
 ```rust
 // Full configuration with upload server
 let config = CrashpadConfig::builder()
-    .handler_path(std::env::var("CRASHPAD_HANDLER")
-        .unwrap_or_else(|_| "./crashpad_handler".to_string()))
-    .database_path("/var/crash/myapp")
-    .metrics_path("/var/metrics/myapp")  // Optional: metrics storage
-    .url("https://crashes.example.com/api/minidump")
-    .build();
+.handler_path(std::env::var("CRASHPAD_HANDLER")
+.unwrap_or_else( | _ | "./crashpad_handler".to_string()))
+.database_path("/var/crash/myapp")
+.metrics_path("/var/metrics/myapp")  // Optional: metrics storage
+.url("https://crashes.example.com/api/minidump")
+.build();
 ```
 
 ### Platform-Specific Configuration
@@ -133,20 +133,20 @@ let config = CrashpadConfig::builder()
 ```rust
 // Adjust configuration based on environment
 let config = if cfg!(debug_assertions) {
-    // Development: local storage only, no rate limiting
-    CrashpadConfig::builder()
-        .handler_path("./target/debug/crashpad_handler")
-        .database_path("./dev_crashes")
-        .rate_limit(false)  // Disable rate limiting for testing
-        .build()
+// Development: local storage only, no rate limiting
+CrashpadConfig::builder()
+.handler_path("./target/debug/crashpad_handler")
+.database_path("./dev_crashes")
+.rate_limit(false)  // Disable rate limiting for testing
+.build()
 } else {
-    // Production: with upload server
-    CrashpadConfig::builder()
-        .handler_path("/usr/local/bin/crashpad_handler")
-        .database_path("/var/crash/myapp")
-        .url("https://crashes.example.com/submit")
-        .upload_gzip(true)  // Enable compression (default)
-        .build()
+// Production: with upload server
+CrashpadConfig::builder()
+.handler_path("/usr/local/bin/crashpad_handler")
+.database_path("/var/crash/myapp")
+.url("https://crashes.example.com/submit")
+.upload_gzip(true)  // Enable compression (default)
+.build()
 };
 ```
 
@@ -155,38 +155,39 @@ let config = if cfg!(debug_assertions) {
 ```rust
 // Control handler behavior with high-level API
 let config = CrashpadConfig::builder()
-    .database_path("./crashes")
-    .rate_limit(false)              // Disable upload rate limiting
-    .upload_gzip(false)             // Disable gzip compression
-    .periodic_tasks(false)          // Disable periodic maintenance
-    .identify_client_via_url(false) // Don't add client ID to URL
-    .build();
+.database_path("./crashes")
+.rate_limit(false)              // Disable upload rate limiting
+.upload_gzip(false)             // Disable gzip compression
+.periodic_tasks(false)          // Disable periodic maintenance
+.identify_client_via_url(false) // Don't add client ID to URL
+.build();
 
 // Advanced: use low-level API for custom arguments
 let config = CrashpadConfig::builder()
-    .database_path("./crashes")
-    .handler_argument("--monitor-self")  // Enable self-monitoring
-    .handler_argument("--monitor-self-annotation=version=1.0")
-    .build();
+.database_path("./crashes")
+.handler_argument("--monitor-self")  // Enable self-monitoring
+.handler_argument("--monitor-self-annotation=version=1.0")
+.build();
 
 // Mix high-level and low-level APIs
 let config = CrashpadConfig::builder()
-    .database_path("./crashes")
-    .rate_limit(false)  // High-level API
-    .handler_argument("--monitor-self")  // Low-level API
-    .build();
+.database_path("./crashes")
+.rate_limit(false)  // High-level API
+.handler_argument("--monitor-self")  // Low-level API
+.build();
 ```
 
-**Note**: Handler arguments are currently ignored on iOS/tvOS/watchOS as they use an in-process handler with hardcoded settings. This may change in future Crashpad versions.
+**Note**: Handler arguments are currently ignored on iOS/tvOS/watchOS as they use an in-process handler with hardcoded
+settings. This may change in future Crashpad versions.
 
 ## Platform Support
 
-| Platform | Architecture            | Status     | Handler Type        |
-|----------|-------------------------|------------|---------------------|
-| macOS    | x86_64, aarch64         | ✅ Stable   | External executable |
-| Linux    | x86_64, aarch64         | ✅ Stable   | External executable |
-| iOS      | arm64, x86_64 sim       | ✅ Stable   | In-process          |
-| Android  | arm, arm64, x86, x86_64 | ✅ Stable   | External/In-process |
+| Platform | Architecture            | Status   | Handler Type        |
+|----------|-------------------------|----------|---------------------|
+| macOS    | x86_64, aarch64         | ✅ Stable | External executable |
+| Linux    | x86_64, aarch64         | ✅ Stable | External executable |
+| iOS      | arm64, x86_64 sim       | ✅ Stable | In-process          |
+| Android  | arm, arm64, x86, x86_64 | ✅ Stable | External/In-process |
 
 ## Examples
 
@@ -264,8 +265,8 @@ The `crashpad_handler` executable must be available at runtime. Common approache
 ### For Library Users
 
 - [API Documentation](https://docs.rs/crashpad-rs) - Full API reference
-- [Integration Guide](https://github.com/bahamoth/crashpad-rs/blob/main/CONVENTIONS.md#integration) - Production integration
-- [Platform Notes](https://github.com/bahamoth/crashpad-rs/blob/main/CONVENTIONS.md#platform-specific-integration) - Platform-specific considerations
+- [Integration Guide](https://github.com/bahamoth/crashpad-rs/blob/main/CONVENTIONS.md#integration) - Production
+  integration
 
 ### For Contributors
 
@@ -276,7 +277,8 @@ The `crashpad_handler` executable must be available at runtime. Common approache
 ## Known Limitations
 
 - **Windows Support**: Not currently available (build system limitation)
-- **iOS Handler Arguments**: Handler arguments are ignored on iOS/tvOS/watchOS as the in-process handler uses hardcoded settings (Crashpad limitation, see [bug #23](https://crashpad.chromium.org/bug/23))
+- **iOS Handler Arguments**: Handler arguments are ignored on iOS/tvOS/watchOS as the in-process handler uses hardcoded
+  settings (Crashpad limitation, see [bug #23](https://crashpad.chromium.org/bug/23))
 - **Handler Update**: No automatic update mechanism for deployed handlers
 
 Contributions are welcome!
@@ -302,7 +304,8 @@ Licensed under MIT license ([LICENSE](LICENSE)).
 
 ## Contributing
 
-Contributions are welcome! See [DEVELOPING.md](https://github.com/bahamoth/crashpad-rs/blob/main/DEVELOPING.md) for build and test instructions.
+Contributions are welcome! See [DEVELOPING.md](https://github.com/bahamoth/crashpad-rs/blob/main/DEVELOPING.md) for
+build and test instructions.
 
 ## Support
 

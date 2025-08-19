@@ -25,10 +25,6 @@
           "glob": "README.md",
           "updateLine": [
             {
-              "pattern": "badge/version-([0-9]+\\.[0-9]+\\.[0-9]+)-blue\\.svg",
-              "replacement": "badge/version-${version}-blue.svg"
-            },
-            {
               "pattern": "crashpad-rs = \"([0-9]+\\.[0-9]+\\.[0-9]+)\"",
               "replacement": "crashpad-rs = \"${version}\""
             }
