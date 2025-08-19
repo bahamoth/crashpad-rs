@@ -24,7 +24,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           submodules: recursive
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ github.token }}
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
@@ -44,6 +44,8 @@ jobs:
 
       - name: Update dependencies
         id: update
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           # Configure git
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
