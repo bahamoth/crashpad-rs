@@ -14,7 +14,7 @@ keywords = { workspace = true }
 categories = { workspace = true }
 
 [dependencies]
-crashpad-rs-sys = { path = "../crashpad-sys", version = "0.2.4" }
+crashpad-rs-sys = { path = "../crashpad-sys", version = "0.2.5" }
 thiserror = { workspace = true }
 
 [dev-dependencies]
