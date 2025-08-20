@@ -16,6 +16,7 @@ use std::process::Command;
 /// 3. Copy the git_revision value for GN
 /// 4. Search for 'ninja' in the deps section  
 /// 5. Copy the version string for Ninja
+/// 6. For Clang, look for 'windows/clang' and copy the object_name
 ///
 /// Example from DEPS:
 /// ```
@@ -196,7 +197,6 @@ impl BinaryToolManager {
         let mut archive = zip::ZipArchive::new(file)?;
 
         // Try to find and extract 'gn' binary
-        let gn_name = format!("gn{}", self.platform.executable_suffix());
         let mut found = false;
 
         for i in 0..archive.len() {
@@ -209,8 +209,7 @@ impl BinaryToolManager {
                 || name.ends_with("/gn")
                 || name.ends_with("/gn.exe")
             {
-                let outpath = self.cache_dir.join(&gn_name);
-                let mut outfile = fs::File::create(&outpath)?;
+                let mut outfile = fs::File::create(target_path)?;
                 io::copy(&mut file, &mut outfile)?;
                 found = true;
                 break;
@@ -218,21 +217,7 @@ impl BinaryToolManager {
         }
 
         if !found {
-            // If specific file not found, extract all and hope for the best
-            for i in 0..archive.len() {
-                let mut file = archive.by_index(i)?;
-                let outpath = self.cache_dir.join(file.name());
-
-                if file.name().ends_with('/') {
-                    fs::create_dir_all(&outpath)?;
-                } else {
-                    if let Some(parent) = outpath.parent() {
-                        fs::create_dir_all(parent)?;
-                    }
-                    let mut outfile = fs::File::create(&outpath)?;
-                    io::copy(&mut file, &mut outfile)?;
-                }
-            }
+            return Err("GN binary not found in archive".into());
         }
 
         // Clean up temp file
@@ -275,17 +260,22 @@ impl BinaryToolManager {
         let mut archive = zip::ZipArchive::new(file)?;
 
         // Extract all files (ninja releases are simple: just ninja binary + README)
+        let mut extracted = false;
         for i in 0..archive.len() {
             let mut file = archive.by_index(i)?;
             let name = file.name();
 
             // Look for ninja binary
             if name == "ninja" || name == "ninja.exe" {
-                let ninja_name = format!("ninja{}", self.platform.executable_suffix());
-                let outpath = self.cache_dir.join(&ninja_name);
-                let mut outfile = fs::File::create(&outpath)?;
+                let mut outfile = fs::File::create(target_path)?;
                 io::copy(&mut file, &mut outfile)?;
+                extracted = true;
+                break;
             }
+        }
+
+        if !extracted {
+            return Err("Ninja binary not found in archive".into());
         }
 
         // Clean up temp file

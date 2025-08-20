@@ -81,13 +81,10 @@ impl BuildConfig {
             .to_string(),
         );
 
-        // Disable tests since we don't need them and they require additional dependencies
+        // Disable tests (even though it shows a warning, it still works)
         config
             .gn_args
             .insert("crashpad_build_tests".to_string(), "false".to_string());
-        config
-            .gn_args
-            .insert("crashpad_build_test_data".to_string(), "false".to_string());
 
         // Platform-specific configuration
         if target.contains("android") {
@@ -101,7 +98,7 @@ impl BuildConfig {
         } else if target.contains("linux") {
             config.setup_linux(&target);
         } else {
-            return Err(format!("Unsupported target: {target}").into());
+            return Err(format!("Unsupported target: {target}. Supported targets: android, ios, darwin, windows-msvc, linux").into());
         }
 
         Ok(config)
@@ -122,7 +119,10 @@ impl BuildConfig {
         } else if target.starts_with("i686") {
             ("x86", "i686-linux-android", 21)
         } else {
-            return Err(format!("Unsupported Android architecture: {target}").into());
+            return Err(format!(
+                "Unsupported Android architecture: {target}. Supported: aarch64, x86_64, armv7, i686"
+            )
+            .into());
         };
 
         // Compiler path (dynamic, not hardcoded)
@@ -134,7 +134,10 @@ impl BuildConfig {
         } else if cfg!(target_os = "windows") {
             "windows-x86_64"
         } else {
-            return Err("Unsupported host platform for Android NDK".into());
+            return Err(
+                "Unsupported host platform for Android NDK. Supported: macOS, Linux, Windows"
+                    .into(),
+            );
         };
 
         self.compiler = ndk
@@ -276,13 +279,27 @@ impl BuildConfig {
     }
 
     /// Configure for Windows
+    ///
+    /// Windows build uses Visual Studio's Clang/LLVM toolchain by default.
+    /// MinGW is not supported because Crashpad relies on Windows-specific
+    /// features that are only available with MSVC toolchain.
     fn setup_windows(&mut self, target: &str) -> Result<(), Box<dyn std::error::Error>> {
+        if !target.contains("msvc") {
+            return Err(
+                "Only MSVC target is supported for Windows. MinGW is not supported because Crashpad requires Windows SDK features."
+                    .into(),
+            );
+        }
+
         let arch = if target.starts_with("x86_64") {
             "x64"
         } else if target.starts_with("i686") {
             "x86"
         } else {
-            return Err(format!("Unsupported Windows architecture: {target}").into());
+            return Err(format!(
+                "Unsupported Windows architecture: {target}. Supported: x86_64, i686"
+            )
+            .into());
         };
 
         self.gn_args
@@ -290,12 +307,33 @@ impl BuildConfig {
         self.gn_args
             .insert("target_cpu".to_string(), format!("\"{arch}\""));
 
-        // For cross-compilation from Linux
-        if !target.contains("msvc") {
-            // MinGW settings
-            self.compiler = PathBuf::from("x86_64-w64-mingw32-g++");
-            self.archiver = "x86_64-w64-mingw32-ar".to_string();
+        // Use Clang (default for Chromium/Crashpad on Windows)
+        // GN will use win_helper.py to find Visual Studio's Clang automatically
+        // mini_chromium_is_clang is true by default
+
+        // Use dynamic CRT (/MD) to match Rust's default
+        // This prevents LNK2038 runtime library mismatch errors
+        self.gn_args
+            .insert("is_component_build".to_string(), "false".to_string());
+        self.gn_args
+            .insert("use_custom_libcxx".to_string(), "false".to_string());
+
+        // Force dynamic runtime
+        if self.profile == "release" {
+            self.gn_args
+                .insert("extra_cflags".to_string(), "\"/MD\"".to_string());
+        } else {
+            self.gn_args
+                .insert("extra_cflags".to_string(), "\"/MDd\"".to_string());
         }
+
+        // Windows-specific libraries
+        self.link_libs = vec![
+            "advapi32".to_string(),
+            "kernel32".to_string(),
+            "user32".to_string(),
+            "winmm".to_string(),
+        ];
 
         Ok(())
     }
@@ -370,7 +408,7 @@ impl BuildConfig {
             }
         }
 
-        Err("Android NDK not found. Please set ANDROID_NDK_HOME or install cargo-ndk".into())
+        Err("Android NDK not found. Please set ANDROID_NDK_HOME environment variable or install cargo-ndk (cargo install cargo-ndk)".into())
     }
 
     /// Get build directory for current platform

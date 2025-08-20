@@ -66,6 +66,16 @@ void crashpad_client_start_processing_pending_reports();
 #endif
 #endif
 
+// DumpWithoutCrash support - capture a dump without crashing the process
+// This is useful for diagnostic purposes when you want to capture the current
+// state without terminating the application
+void crashpad_dump_without_crash();
+
+// Alternative that allows passing a pre-captured context
+// On Windows: context should be a pointer to CONTEXT structure
+// On other platforms: context should be a pointer to NativeCPUContext
+void crashpad_dump_without_crash_with_context(void* context);
+
 #ifdef __cplusplus
 }
 #endif

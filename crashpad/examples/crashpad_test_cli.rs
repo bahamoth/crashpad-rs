@@ -125,11 +125,50 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let command = args.get(1).map(|s| s.as_str());
 
     match command {
+        Some("dump") => {
+            println!("\nCapturing dump without crash...");
+            client.dump_without_crash();
+            println!("✓ Dump captured successfully without crashing the process");
+            println!("Check the database directory for the dump file:");
+            println!("  {}", exe_dir.join("crashpad_database").display());
+            if cfg!(windows) {
+                println!("  On Windows, check the reports/ subdirectory");
+            }
+            process::exit(EXIT_SUCCESS);
+        }
         Some("crash") => {
             println!("\nTriggering crash now...");
-            // Trigger an actual crash
+
+            // Windows needs a different approach to trigger SEH exceptions
+            // that Crashpad can capture
+            #[cfg(windows)]
+            // SAFETY: This intentionally triggers a crash for testing purposes.
+            // The inline assembly causes an access violation that will be caught
+            // by Windows SEH and handled by Crashpad.
             unsafe {
-                // Null pointer dereference
+                // Use inline assembly to bypass Rust's UB checks
+                // This directly dereferences an invalid address, causing an access violation
+                #[cfg(target_arch = "x86_64")]
+                {
+                    std::arch::asm!("mov dword ptr [0x7], 42", options(nostack));
+                }
+                #[cfg(target_arch = "x86")]
+                {
+                    std::arch::asm!("mov dword ptr [0x7], 42", options(nostack));
+                }
+                #[cfg(target_arch = "aarch64")]
+                {
+                    let invalid_ptr = 7 as *mut i32;
+                    core::ptr::write_volatile(invalid_ptr, 42);
+                }
+            }
+
+            #[cfg(not(windows))]
+            // SAFETY: This intentionally triggers a crash for testing purposes.
+            // The null pointer dereference will cause a segmentation fault
+            // that will be caught by the signal handler and processed by Crashpad.
+            unsafe {
+                // On Unix-like systems, null pointer dereference works fine
                 let null_ptr: *const i32 = std::ptr::null();
                 println!("About to crash with value: {}", *null_ptr);
             }
@@ -160,6 +199,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Some("--help") | Some("-h") => {
             println!("\nUsage: {} [COMMAND]", args[0]);
             println!("\nCommands:");
+            println!("  dump     Capture a dump without crashing");
             println!("  crash    Trigger a crash to test handler");
             println!("  test     Run automated tests with TAP output");
             println!("  --help   Show this help message");
@@ -175,16 +215,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             if should_crash_env {
                 println!("\nTriggering crash due to CRASHPAD_TEST_CRASH environment variable...");
+                // SAFETY: This intentionally triggers a crash for testing purposes.
+                // The null pointer dereference will cause a segmentation fault.
                 unsafe {
                     let null_ptr: *const i32 = std::ptr::null();
                     println!("About to crash with value: {}", *null_ptr);
                 }
             } else {
                 println!("\nCrashpad initialized successfully!");
-                println!("To trigger a crash, run with:");
-                println!("  {} crash", args[0]);
-                println!("Or set environment variable:");
-                println!("  CRASHPAD_TEST_CRASH=1 {}", args[0]);
+                println!("Available commands:");
+                println!("  {} dump     - Capture a dump without crashing", args[0]);
+                println!("  {} crash    - Trigger a crash to test handler", args[0]);
+                println!("  {} test     - Run automated tests", args[0]);
+                println!("\nOr set environment variable:");
+                println!("  CRASHPAD_TEST_CRASH=1 {} (deprecated)", args[0]);
             }
         }
     }
