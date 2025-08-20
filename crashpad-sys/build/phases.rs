@@ -30,9 +30,7 @@ impl BuildPhases {
         }
 
         // Use BinaryToolManager for GN/Ninja
-        if self.config.verbose {
-            eprintln!("Setting up binary tools...");
-        }
+        // Set up GN and Ninja binaries
 
         let tool_manager = BinaryToolManager::new(self.config.verbose)?;
 
@@ -44,10 +42,9 @@ impl BuildPhases {
         self.gn_path = Some(gn_path.clone());
         self.ninja_path = Some(ninja_path.clone());
 
-        if self.config.verbose {
-            eprintln!("GN: {}", gn_path.display());
-            eprintln!("Ninja: {}", ninja_path.display());
-        }
+        // Store paths for later build phases
+
+        // Windows: MSVC will be used (no Clang download needed)
 
         // Check if symlinks already exist (created by xtask symlink)
         let test_link = self
@@ -57,14 +54,10 @@ impl BuildPhases {
 
         if test_link.exists() {
             // Symlinks already exist, skip creation
-            if self.config.verbose {
-                eprintln!("Dependencies already linked, skipping symlink creation");
-            }
+            // Dependencies already linked
         } else {
             // Create symlinks/junctions for dependencies
-            if self.config.verbose {
-                eprintln!("Creating dependency symlinks...");
-            }
+            // Create symlinks/junctions for dependencies
             self.create_dependency_links()?;
         }
 
@@ -74,6 +67,12 @@ impl BuildPhases {
     /// Phase 2: Configure build with GN
     pub fn configure(&self) -> Result<(), Box<dyn std::error::Error>> {
         let build_dir = self.config.build_dir();
+
+        // Windows: Create python3.exe symlink if needed
+        #[cfg(windows)]
+        if self.config.target.contains("msvc") {
+            self.setup_python3_alias()?;
+        }
 
         // Create GN args string
         let gn_args = self
@@ -102,10 +101,27 @@ impl BuildPhases {
         ])
         .current_dir(&self.config.crashpad_dir);
 
-        let status = cmd.status()?;
+        let output = cmd.output()?;
 
-        if !status.success() {
-            return Err("Failed to generate build files with GN".into());
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        let stdout = String::from_utf8_lossy(&output.stdout);
+
+        // Only show GN output if verbose or on error
+        if self.config.verbose {
+            if !stdout.is_empty() {
+                eprintln!("GN output: {stdout}");
+            }
+            if !stderr.is_empty() {
+                eprintln!("GN stderr: {stderr}");
+            }
+        }
+
+        // Only fail if the command actually failed
+        if !output.status.success() {
+            return Err(format!(
+                "Failed to generate build files with GN. stdout: {stdout}, stderr: {stderr}"
+            )
+            .into());
         }
 
         Ok(())
@@ -115,9 +131,7 @@ impl BuildPhases {
     pub fn build(&self) -> Result<(), Box<dyn std::error::Error>> {
         let build_dir = self.config.build_dir();
 
-        if self.config.verbose {
-            eprintln!("Running ninja build...");
-        }
+        // Building with Ninja
 
         // Get Ninja path (set in prepare phase)
         let ninja_cmd = self
@@ -168,10 +182,19 @@ impl BuildPhases {
             cmd.arg("handler:crashpad_handler");
         }
 
-        let status = cmd.status()?;
+        let output = cmd.output()?;
 
-        if !status.success() {
-            return Err("Ninja build failed".into());
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            // Show build errors
+            if !stderr.is_empty() {
+                eprintln!("Build error: {stderr}");
+            }
+            if !stdout.is_empty() && self.config.verbose {
+                eprintln!("Build output: {stdout}");
+            }
+            return Err("Failed to build Crashpad libraries".into());
         }
 
         // Copy crashpad_handler to target directory for easy access
@@ -187,6 +210,61 @@ impl BuildPhases {
         }
 
         let wrapper_cc = self.config.manifest_dir.join("crashpad_wrapper.cc");
+
+        // Windows: Use cc crate for MSVC compilation
+        if self.config.target.contains("windows") {
+            // Use cc crate for MSVC compilation on Windows
+
+            let mut build = cc::Build::new();
+            build
+                .cpp(true)
+                .std("c++17")
+                .file(&wrapper_cc)
+                .include(&self.config.crashpad_dir)
+                .include(
+                    self.config
+                        .crashpad_dir
+                        .join("third_party/mini_chromium/mini_chromium"),
+                )
+                .out_dir(&self.config.out_dir);
+
+            // Windows-specific flags
+            build.flag_if_supported("/EHsc");
+
+            // Match the runtime library with what GN is using
+            // GN builds with /MDd in debug mode, /MD in release mode
+            if self.config.profile == "debug" {
+                // Debug build - use dynamic debug CRT to match Crashpad
+                build.flag("/MDd");
+                // Also set iterator debug level to match
+                build.define("_ITERATOR_DEBUG_LEVEL", "2");
+            } else {
+                // Release build - use dynamic release CRT
+                build.flag("/MD");
+            }
+
+            // Force debug mode for cc crate to match our profile
+            if self.config.profile == "debug" {
+                build.debug(true);
+                build.opt_level(0);
+            } else {
+                build.debug(false);
+                build.opt_level(2);
+            }
+
+            // Enable verbose output to debug the issue
+            if self.config.verbose {
+                build.cargo_metadata(false);
+                std::env::set_var("CC_PRINT", "1");
+            }
+
+            // Compile the wrapper
+            build.try_compile("crashpad_wrapper")?;
+
+            return Ok(());
+        }
+
+        // Original code for non-Windows platforms
         let wrapper_obj = self.config.out_dir.join("crashpad_wrapper.o");
 
         let mut cmd = Command::new(&self.config.compiler);
@@ -240,6 +318,16 @@ impl BuildPhases {
             eprintln!("Creating static library...");
         }
 
+        // Windows: cc crate already created the library
+        if self.config.target.contains("windows") {
+            let lib_path = self.config.out_dir.join("crashpad_wrapper.lib");
+            if !lib_path.exists() {
+                return Err(format!("Wrapper library not found at {}", lib_path.display()).into());
+            }
+            return Ok(());
+        }
+
+        // Original code for non-Windows platforms
         let lib_path = self.config.out_dir.join("libcrashpad_wrapper.a");
         let wrapper_obj = self.config.out_dir.join("crashpad_wrapper.o");
         let build_dir = self.config.build_dir();
@@ -298,6 +386,35 @@ impl BuildPhases {
     pub fn bindgen(&self) -> Result<(), Box<dyn std::error::Error>> {
         if self.config.verbose {
             eprintln!("Generating FFI bindings...");
+        }
+
+        // Windows: Try to find libclang using cc crate's Visual Studio detection
+        #[cfg(windows)]
+        {
+            if env::var("LIBCLANG_PATH").is_err() {
+                // Use cc crate to find Visual Studio
+                let build = cc::Build::new();
+                let tool = build.try_get_compiler()?;
+
+                // Get the compiler path and derive VS installation from it
+                let compiler_path = tool.path();
+                if self.config.verbose {
+                    eprintln!("Found compiler at: {}", compiler_path.display());
+                }
+
+                // Try to find LLVM tools relative to the compiler
+                // Compiler is typically at: VS_ROOT\VC\Tools\MSVC\VERSION\bin\HostX64\x64\cl.exe
+                // LLVM is typically at: VS_ROOT\VC\Tools\Llvm\x64\bin
+                if let Some(vc_root) = compiler_path.ancestors().find(|p| p.ends_with("VC")) {
+                    let llvm_path = vc_root.join("Tools").join("Llvm").join("x64").join("bin");
+                    if llvm_path.exists() && llvm_path.join("libclang.dll").exists() {
+                        env::set_var("LIBCLANG_PATH", &llvm_path);
+                        if self.config.verbose {
+                            eprintln!("Found libclang at: {}", llvm_path.display());
+                        }
+                    }
+                }
+            }
         }
 
         let mut builder = bindgen::Builder::default()
@@ -389,6 +506,13 @@ impl BuildPhases {
             println!("cargo:rustc-link-lib={lib}");
         }
 
+        // Windows: Link with debug CRT libraries when in debug mode
+        #[cfg(windows)]
+        if self.config.target.contains("windows") && self.config.profile == "debug" {
+            // Link with MSVCRTD (debug CRT)
+            println!("cargo:rustc-link-lib=msvcrtd");
+        }
+
         // Frameworks (iOS/macOS)
         for framework in &self.config.frameworks {
             println!("cargo:rustc-link-lib=framework={framework}");
@@ -401,7 +525,12 @@ impl BuildPhases {
 
         // Verify handler exists (for platforms that use external handler)
         if !self.config.target.contains("ios") {
-            let handler_path = self.config.build_dir().join("crashpad_handler");
+            let handler_name = if self.config.target.contains("windows") {
+                "crashpad_handler.exe"
+            } else {
+                "crashpad_handler"
+            };
+            let handler_path = self.config.build_dir().join(handler_name);
             if !handler_path.exists() {
                 println!(
                     "cargo:warning=crashpad_handler not found at {}. Crash reports cannot be uploaded automatically.",
@@ -421,7 +550,11 @@ impl BuildPhases {
         }
 
         let build_dir = self.config.build_dir();
-        let handler_src = build_dir.join("crashpad_handler");
+        let handler_src = if self.config.target.contains("windows") {
+            build_dir.join("crashpad_handler.exe")
+        } else {
+            build_dir.join("crashpad_handler")
+        };
 
         // Skip if handler wasn't built
         if !handler_src.exists() {
@@ -474,9 +607,7 @@ impl BuildPhases {
         // Copy the handler
         fs::copy(&handler_src, &handler_dest)?;
 
-        if self.config.verbose {
-            eprintln!("Copied crashpad_handler to {}", handler_dest.display());
-        }
+        // Handler copied to target directory for easy access
 
         // Set executable permissions on Unix
         #[cfg(unix)]
@@ -544,21 +675,79 @@ impl BuildPhases {
 
             #[cfg(windows)]
             {
-                // On Windows, try to create a junction (directory symlink)
-                // This doesn't require admin privileges
-                std::os::windows::fs::symlink_dir(&target, &link).or_else(|_| {
-                    // If junction fails, fall back to copying
-                    if self.config.verbose {
-                        eprintln!(
-                            "Warning: Failed to create junction, copying {} instead",
-                            dep_name
-                        );
-                    }
-                    Self::copy_directory_impl(&target, &link)
-                })?;
+                // Windows: Always copy instead of symlink to avoid permission issues
+                // Copy directory for Windows (symlinks not supported)
+                Self::copy_directory(&target, &link)?;
             }
         }
 
         Ok(())
+    }
+
+    /// Copy directory recursively (Windows fallback for symlinks)
+    #[cfg(windows)]
+    fn copy_directory(
+        src: &std::path::Path,
+        dst: &std::path::Path,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        use std::fs;
+
+        fs::create_dir_all(dst)?;
+        for entry in fs::read_dir(src)? {
+            let entry = entry?;
+            let src_path = entry.path();
+            let file_name = entry.file_name();
+            let dst_path = dst.join(&file_name);
+
+            if src_path.is_dir() {
+                Self::copy_directory(&src_path, &dst_path)?;
+            } else {
+                fs::copy(&src_path, &dst_path)?;
+            }
+        }
+        Ok(())
+    }
+
+    /// Setup python3 alias for Windows
+    #[cfg(windows)]
+    fn setup_python3_alias(&self) -> Result<(), Box<dyn std::error::Error>> {
+        use std::process::Command;
+
+        // First check if python3 already works
+        if let Ok(output) = Command::new("python3").arg("--version").output() {
+            if output.status.success() {
+                if self.config.verbose {
+                    eprintln!("python3 already available");
+                }
+                return Ok(());
+            }
+        }
+
+        // Find python.exe location
+        if let Ok(output) = Command::new("where").arg("python").output() {
+            if output.status.success() {
+                let paths = String::from_utf8_lossy(&output.stdout);
+                for path_str in paths.lines() {
+                    let python_path = PathBuf::from(path_str.trim());
+                    if python_path.exists() && !path_str.contains("WindowsApps") {
+                        // Create python3.exe in the same directory
+                        let python_dir = python_path.parent().unwrap();
+                        let python3_path = python_dir.join("python3.exe");
+
+                        if !python3_path.exists() {
+                            // Copy python.exe to python3.exe
+                            fs::copy(&python_path, &python3_path)?;
+                            if self.config.verbose {
+                                eprintln!("Created python3.exe at: {}", python3_path.display());
+                            }
+                        }
+                        return Ok(());
+                    }
+                }
+            }
+        }
+
+        // Python is required for Windows builds (used by GN scripts)
+        Err("Python is required for Windows builds".into())
     }
 }

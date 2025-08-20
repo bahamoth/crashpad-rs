@@ -325,6 +325,41 @@ impl CrashpadClient {
             crashpad_rs_sys::crashpad_client_process_intermediate_dumps();
         }
     }
+
+    /// Capture a crash dump without actually crashing the process.
+    ///
+    /// This is useful for diagnostic purposes when you want to capture the current
+    /// state of the application without terminating it. The dump will be processed
+    /// and uploaded (if configured) just like a regular crash dump.
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// # use crashpad_rs::{CrashpadClient, CrashpadConfig};
+    /// # let client = CrashpadClient::new().unwrap();
+    /// # let config = CrashpadConfig::builder()
+    /// #     .handler_path("/path/to/handler")
+    /// #     .database_path("/path/to/database")
+    /// #     .build();
+    /// # client.start_with_config(&config, &Default::default()).unwrap();
+    ///
+    /// // Capture diagnostic information when an error occurs
+    /// let some_error_condition = true; // Your actual error condition here
+    /// if some_error_condition {
+    ///     client.dump_without_crash();
+    ///     // Continue running - the process doesn't terminate
+    /// }
+    /// ```
+    ///
+    /// # Note
+    ///
+    /// A handler must have been installed before calling this method.
+    /// The captured context will be from the point where this function is called.
+    pub fn dump_without_crash(&self) {
+        unsafe {
+            crashpad_rs_sys::crashpad_dump_without_crash();
+        }
+    }
 }
 
 impl Drop for CrashpadClient {

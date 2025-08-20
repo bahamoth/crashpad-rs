@@ -188,6 +188,41 @@ settings. This may change in future Crashpad versions.
 | Linux    | x86_64, aarch64         | ✅ Stable | External executable |
 | iOS      | arm64, x86_64 sim       | ✅ Stable | In-process          |
 | Android  | arm, arm64, x86, x86_64 | ✅ Stable | External/In-process |
+| Windows  | x86_64                  | ✅ Stable | External executable |
+
+## Advanced Features
+
+### Capturing Dumps Without Crashing
+
+The `dump_without_crash()` method allows you to capture diagnostic information without terminating your application. This is useful for:
+- Debugging production issues
+- Capturing state during recoverable errors
+- Performance monitoring
+- User-requested diagnostics
+
+```rust
+use crashpad_rs::{CrashpadClient, CrashpadConfig};
+
+// Initialize Crashpad as usual
+let client = CrashpadClient::new()?;
+let config = CrashpadConfig::builder()
+    .handler_path("./crashpad_handler")
+    .database_path("./crashes")
+    .build();
+client.start_with_config(&config, &Default::default())?;
+
+// Capture diagnostic dump on error condition
+if let Err(e) = some_operation() {
+    // Log the error
+    eprintln!("Operation failed: {}", e);
+    
+    // Capture current state for analysis
+    client.dump_without_crash();
+    
+    // Continue running - no crash occurs
+    handle_error_gracefully(e);
+}
+```
 
 ## Examples
 
@@ -224,6 +259,21 @@ settings. This may change in future Crashpad versions.
    ```bash
    # If you have crashpad_handler in current directory or PATH
    cargo run --example crashpad_test_cli
+   ```
+
+5. **Test the available commands**
+   ```bash
+   # Show help
+   cargo run --example crashpad_test_cli -- --help
+   
+   # Capture a diagnostic dump without crashing
+   cargo run --example crashpad_test_cli -- dump
+   
+   # Trigger a real crash for testing
+   cargo run --example crashpad_test_cli -- crash
+   
+   # Run automated tests
+   cargo run --example crashpad_test_cli -- test
    ```
 
 **Note**: The example looks for the handler in this order:

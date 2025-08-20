@@ -39,8 +39,17 @@ enum Commands {
         #[arg(long)]
         create_pr: bool,
     },
-    /// Create symlinks for Crashpad dependencies
+    /// Create symlinks for Crashpad dependencies (copy on Windows)
     Symlink,
+    /// Copy dependencies for Windows packaging
+    #[cfg(windows)]
+    CopyDeps,
+    /// Build prebuilt packages for distribution
+    BuildPrebuilt {
+        /// Target triple (optional, defaults to current)
+        #[arg(long)]
+        target: Option<String>,
+    },
 }
 
 fn main() -> Result<()> {
@@ -55,6 +64,9 @@ fn main() -> Result<()> {
         Commands::InstallTools => install_tools(&sh)?,
         Commands::UpdateDeps { create_pr } => update_deps(&sh, create_pr)?,
         Commands::Symlink => create_symlinks(&sh)?,
+        #[cfg(windows)]
+        Commands::CopyDeps => copy_deps(&sh)?,
+        Commands::BuildPrebuilt { target } => build_prebuilt(&sh, target)?,
     }
 
     Ok(())
@@ -381,7 +393,14 @@ fn parse_deps(content: &str) -> Result<HashMap<String, String>> {
 }
 
 fn create_symlinks(sh: &Shell) -> Result<()> {
-    println!("🔗 Creating symlinks for Crashpad dependencies...");
+    #[cfg(windows)]
+    {
+        println!("📁 Copying dependencies for Windows (symlinks not used)...");
+    }
+    #[cfg(unix)]
+    {
+        println!("🔗 Creating symlinks for Crashpad dependencies...");
+    }
 
     let deps = vec![
         ("mini_chromium", "mini_chromium"),
@@ -449,24 +468,272 @@ fn create_symlinks(sh: &Shell) -> Result<()> {
             rel_path.push(component);
         }
 
-        // Create symlink
+        // Create symlink or copy
         #[cfg(unix)]
         {
             use std::os::unix::fs::symlink;
             symlink(&rel_path, &link)?;
+            println!("  ✓ Linked {} -> {}", dep_name, rel_path.display());
         }
 
         #[cfg(windows)]
         {
-            use std::os::windows::fs::symlink_dir;
-            symlink_dir(&rel_path, &link)?;
+            // Windows: Always copy instead of symlink
+            copy_dir_all(&target, &link)?;
+            println!("  ✓ Copied {} to {}", dep_name, link.display());
         }
-
-        println!("  ✓ Linked {} -> {}", dep_name, rel_path.display());
     }
 
+    #[cfg(unix)]
     println!("✅ Symlinks created successfully");
+    #[cfg(windows)]
+    println!("✅ Dependencies copied successfully");
+
     println!("📦 You can now run: cargo package --package crashpad-rs-sys");
 
     Ok(())
+}
+
+/// Copy dependencies for Windows packaging
+#[cfg(windows)]
+fn copy_deps(sh: &Shell) -> Result<()> {
+    println!("📁 Copying dependencies for Windows packaging...");
+
+    let workspace_root = find_workspace_root(sh)?;
+    let crashpad_dir = workspace_root.join("crashpad-sys/third_party/crashpad");
+
+    let deps = vec![
+        ("mini_chromium", "mini_chromium"),
+        ("googletest", "googletest"),
+        ("zlib", "zlib"),
+        ("libfuzzer", "src"),
+        ("edo", "edo"),
+        ("lss", "lss"),
+    ];
+
+    for (dep_name, subdir) in deps {
+        let src = workspace_root.join(format!("crashpad-sys/third_party/{}", dep_name));
+        let dst = crashpad_dir.join("third_party").join(dep_name).join(subdir);
+
+        if !src.exists() {
+            println!("  ⚠️  {} source not found, skipping", dep_name);
+            continue;
+        }
+
+        if dst.exists() {
+            println!("  ⏭️  {} already exists, skipping", dep_name);
+            continue;
+        }
+
+        copy_dir_all(&src, &dst)?;
+        println!("  ✓ Copied {}", dep_name);
+    }
+
+    println!("✅ Dependencies copied successfully");
+    println!("📦 You can now run: cargo package --package crashpad-rs-sys");
+
+    Ok(())
+}
+
+/// Helper function to copy directory recursively
+#[cfg(windows)]
+fn copy_dir_all(src: &Path, dst: &Path) -> Result<()> {
+    use std::fs;
+
+    fs::create_dir_all(dst)?;
+    for entry in fs::read_dir(src)? {
+        let entry = entry?;
+        let src_path = entry.path();
+        let file_name = entry.file_name();
+        let dst_path = dst.join(&file_name);
+
+        if src_path.is_dir() {
+            copy_dir_all(&src_path, &dst_path)?;
+        } else {
+            fs::copy(&src_path, &dst_path)?;
+        }
+    }
+    Ok(())
+}
+
+/// Build prebuilt packages for distribution
+fn build_prebuilt(sh: &Shell, target: Option<String>) -> Result<()> {
+    println!("🔨 Building prebuilt package...");
+
+    let workspace_root = find_workspace_root(sh)?;
+    sh.change_dir(&workspace_root);
+
+    // Get target triple
+    let target = target.unwrap_or_else(|| {
+        std::env::var("TARGET").unwrap_or_else(|_| {
+            // Detect current platform
+            let output = std::process::Command::new("rustc")
+                .args(&["-vV"])
+                .output()
+                .expect("Failed to get rustc version");
+            let output_str = String::from_utf8_lossy(&output.stdout);
+
+            // Extract host triple from rustc output
+            for line in output_str.lines() {
+                if line.starts_with("host:") {
+                    return line.split_whitespace().nth(1).unwrap().to_string();
+                }
+            }
+
+            panic!("Could not determine target triple");
+        })
+    });
+
+    println!("📦 Target: {}", target);
+
+    // Build crashpad using vendored-depot
+    println!("🏗️  Building crashpad with vendored-depot...");
+    cmd!(sh, "cargo build --package crashpad-rs-sys --no-default-features --features vendored-depot --target {target}").run()?;
+
+    // Find OUT_DIR from build
+    let out_dir = find_out_dir(sh, &target)?;
+    println!("📂 Build output: {}", out_dir.display());
+
+    // Create dist directory structure
+    let dist_dir = workspace_root.join("dist").join(&target);
+    sh.create_dir(&dist_dir)?;
+    let lib_dir = dist_dir.join("lib");
+    let include_dir = dist_dir.join("include");
+    sh.create_dir(&lib_dir)?;
+    sh.create_dir(&include_dir)?;
+
+    // Copy libraries
+    println!("📚 Copying libraries...");
+    let lib_patterns = if target.contains("windows") {
+        vec!["*.lib"]
+    } else {
+        vec!["*.a"]
+    };
+
+    for pattern in &lib_patterns {
+        let files = std::fs::read_dir(&out_dir)?
+            .filter_map(|entry| entry.ok())
+            .filter(|entry| {
+                let name = entry.file_name();
+                let name_str = name.to_string_lossy();
+                name_str.ends_with(pattern.trim_start_matches('*'))
+            });
+
+        for file in files {
+            let src = file.path();
+            let dst = lib_dir.join(file.file_name());
+            std::fs::copy(&src, &dst)?;
+            println!("  ✓ {}", file.file_name().to_string_lossy());
+        }
+    }
+
+    // Copy crashpad_handler
+    let handler_name = if target.contains("windows") {
+        "crashpad_handler.exe"
+    } else {
+        "crashpad_handler"
+    };
+
+    let handler_src = out_dir.join(handler_name);
+    if handler_src.exists() {
+        let handler_dst = dist_dir.join(handler_name);
+        std::fs::copy(&handler_src, &handler_dst)?;
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mut perms = std::fs::metadata(&handler_dst)?.permissions();
+            perms.set_mode(0o755);
+            std::fs::set_permissions(&handler_dst, perms)?;
+        }
+
+        println!("  ✓ {}", handler_name);
+    }
+
+    // Copy wrapper.h
+    let wrapper_src = workspace_root.join("crashpad-sys/wrapper.h");
+    let wrapper_dst = include_dir.join("wrapper.h");
+    std::fs::copy(&wrapper_src, &wrapper_dst)?;
+    println!("  ✓ wrapper.h");
+
+    // Get package version
+    let cargo_toml = workspace_root.join("crashpad-sys/Cargo.toml");
+    let toml_content = std::fs::read_to_string(&cargo_toml)?;
+    let version = toml_content
+        .lines()
+        .find(|line| line.starts_with("version"))
+        .and_then(|line| line.split('=').nth(1))
+        .map(|v| v.trim().trim_matches('"'))
+        .unwrap_or("unknown");
+
+    // Create tarball
+    let archive_name = format!("crashpad-{}-{}.tar.gz", version, target);
+    let archive_path = workspace_root.join("dist").join(&archive_name);
+
+    println!("📦 Creating archive: {}", archive_name);
+
+    #[cfg(unix)]
+    {
+        sh.change_dir(&workspace_root.join("dist"));
+        cmd!(sh, "tar czf {archive_name} {target}").run()?;
+    }
+
+    #[cfg(windows)]
+    {
+        // Use PowerShell to create archive on Windows
+        let ps_script = format!(
+            "Compress-Archive -Path '{}' -DestinationPath '{}' -Force",
+            dist_dir.display(),
+            archive_path.display()
+        );
+        cmd!(sh, "powershell -Command {ps_script}").run()?;
+    }
+
+    // Generate checksum
+    println!("🔐 Generating checksum...");
+    let archive_content = std::fs::read(&archive_path)?;
+    let digest = sha256::digest(&archive_content[..]);
+    let checksum_path = archive_path.with_extension("tar.gz.sha256");
+    std::fs::write(&checksum_path, format!("{}  {}\n", digest, archive_name))?;
+
+    println!("\n✅ Prebuilt package created:");
+    println!("  📦 {}", archive_path.display());
+    println!("  🔐 {}", checksum_path.display());
+    println!("\n📤 Ready to upload to GitHub Releases!");
+
+    Ok(())
+}
+
+/// Find the OUT_DIR for a specific target
+fn find_out_dir(sh: &Shell, target: &str) -> Result<PathBuf> {
+    let workspace_root = find_workspace_root(sh)?;
+
+    // Common OUT_DIR patterns
+    let candidates = vec![
+        workspace_root.join(format!("target/{}/debug/build", target)),
+        workspace_root.join(format!("target/{}/release/build", target)),
+        workspace_root.join("target/debug/build"),
+        workspace_root.join("target/release/build"),
+    ];
+
+    for candidate in candidates {
+        if candidate.exists() {
+            // Find crashpad-rs-sys build directory
+            for entry in std::fs::read_dir(&candidate)? {
+                let entry = entry?;
+                let path = entry.path();
+                if path.is_dir() && path.to_string_lossy().contains("crashpad-rs-sys") {
+                    let out_dir = path.join("out");
+                    if out_dir.exists() {
+                        return Ok(out_dir);
+                    }
+                }
+            }
+        }
+    }
+
+    anyhow::bail!(
+        "Could not find OUT_DIR for target {}. Make sure the build completed successfully.",
+        target
+    )
 }

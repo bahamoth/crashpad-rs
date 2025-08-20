@@ -3,8 +3,14 @@
 /// This script orchestrates the entire Crashpad build process.
 #[path = "build/config.rs"]
 mod config;
+#[path = "build/depot_build.rs"]
+#[cfg(feature = "vendored-depot")]
+mod depot_build;
 #[path = "build/phases.rs"]
 mod phases;
+#[path = "build/prebuilt.rs"]
+#[cfg(feature = "prebuilt")]
+mod prebuilt;
 #[path = "build/tools.rs"]
 mod tools;
 
@@ -12,6 +18,22 @@ use config::BuildConfig;
 use phases::BuildPhases;
 
 fn main() {
+    // Feature flag validation - ensure only one build strategy is selected
+    #[cfg(all(feature = "vendored", feature = "vendored-depot"))]
+    compile_error!(
+        "Only one build strategy can be selected: vendored, vendored-depot, or prebuilt"
+    );
+
+    #[cfg(all(feature = "vendored", feature = "prebuilt"))]
+    compile_error!(
+        "Only one build strategy can be selected: vendored, vendored-depot, or prebuilt"
+    );
+
+    #[cfg(all(feature = "vendored-depot", feature = "prebuilt"))]
+    compile_error!(
+        "Only one build strategy can be selected: vendored, vendored-depot, or prebuilt"
+    );
+
     // Check if we're building on docs.rs
     if std::env::var("DOCS_RS").is_ok() {
         println!("cargo:warning=docs.rs build detected, skipping native build");
@@ -57,8 +79,53 @@ fn main() {
         return;
     }
 
-    if let Err(e) = run() {
-        eprintln!("Build failed: {e}");
+    // Dispatch based on build strategy
+    #[cfg(feature = "prebuilt")]
+    {
+        println!("cargo:warning=Using prebuilt strategy");
+        if let Err(e) = prebuilt::download_and_link() {
+            eprintln!("Prebuilt download failed: {e}");
+            std::process::exit(1);
+        }
+        return;
+    }
+
+    #[cfg(all(not(feature = "prebuilt"), feature = "vendored-depot"))]
+    {
+        println!("cargo:warning=Using vendored-depot strategy");
+        if let Err(e) = depot_build::build_with_depot_tools() {
+            eprintln!("depot_tools build failed: {e}");
+            std::process::exit(1);
+        }
+        return;
+    }
+
+    #[cfg(all(
+        not(feature = "prebuilt"),
+        not(feature = "vendored-depot"),
+        feature = "vendored"
+    ))]
+    {
+        println!("cargo:warning=Using vendored strategy");
+        if let Err(e) = run() {
+            eprintln!("Build failed: {e}");
+            std::process::exit(1);
+        }
+    }
+
+    // No feature selected - provide helpful error
+    #[cfg(not(any(feature = "vendored", feature = "vendored-depot", feature = "prebuilt")))]
+    {
+        eprintln!("Error: No build strategy selected!");
+        eprintln!();
+        eprintln!("You must select one of the following features:");
+        eprintln!("  --features vendored       : Build from source (Linux/macOS only)");
+        eprintln!(
+            "  --features vendored-depot : Build from source using depot_tools (all platforms)"
+        );
+        eprintln!("  --features prebuilt       : Download pre-built binaries");
+        eprintln!();
+        eprintln!("Example: cargo build --features vendored");
         std::process::exit(1);
     }
 }
@@ -92,13 +159,27 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     println!("cargo:rerun-if-changed=crashpad_wrapper.cc");
 
     // Execute all build phases in order
-    phases.prepare()?; // Phase 1: prepare build tools
-    phases.configure()?; // Phase 2: GN configuration
-    phases.build()?; // Phase 3: Ninja build
-    phases.wrapper()?; // Phase 4: Wrapper compilation
-    phases.package()?; // Phase 5: Static library creation
-    phases.bindgen()?; // Phase 6: FFI bindings generation
-    phases.emit_link()?; // Phase 7: Cargo link metadata
+    phases
+        .prepare()
+        .map_err(|e| format!("Phase 1 (prepare) failed: {e}"))?;
+    phases
+        .configure()
+        .map_err(|e| format!("Phase 2 (configure) failed: {e}"))?;
+    phases
+        .build()
+        .map_err(|e| format!("Phase 3 (build) failed: {e}"))?;
+    phases
+        .wrapper()
+        .map_err(|e| format!("Phase 4 (wrapper) failed: {e}"))?;
+    phases
+        .package()
+        .map_err(|e| format!("Phase 5 (package) failed: {e}"))?;
+    phases
+        .bindgen()
+        .map_err(|e| format!("Phase 6 (bindgen) failed: {e}"))?;
+    phases
+        .emit_link()
+        .map_err(|e| format!("Phase 7 (emit_link) failed: {e}"))?;
 
     Ok(())
 }
