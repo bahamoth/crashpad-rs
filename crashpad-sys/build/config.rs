@@ -23,10 +23,10 @@ pub struct BuildConfig {
     pub compiler: PathBuf,
     pub archiver: String,
     pub cxx_flags: Vec<String>,
-    
+
     // GN build settings (only for vendored build, not depot_tools)
     pub gn_args: HashMap<String, String>,
-    
+
     // Linking settings (always needed)
     pub link_libs: Vec<String>,
     pub crashpad_libs: Vec<String>, // Crashpad static libraries to link
@@ -332,7 +332,7 @@ impl BuildConfig {
         // The cc crate will automatically find MSVC
         self.compiler = PathBuf::from("cl.exe");
         self.archiver = "lib".to_string();
-        
+
         // CC flags for wrapper compilation
         // Note: cc crate handles most flags automatically
         self.cxx_flags = vec![];
@@ -345,7 +345,7 @@ impl BuildConfig {
             "user32".to_string(),
             "winmm".to_string(),
         ];
-        
+
         // Crashpad libraries (same for all build strategies)
         self.crashpad_libs = vec![
             "client".to_string(),

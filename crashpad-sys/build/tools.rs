@@ -5,7 +5,10 @@
 /// 2. depot_tools - for vendored-depot builds (required on Windows)
 use std::env;
 use std::fs;
-#[cfg(any(feature = "vendored", not(any(feature = "vendored", feature = "vendored-depot", feature = "prebuilt"))))]
+#[cfg(any(
+    feature = "vendored",
+    not(any(feature = "vendored", feature = "vendored-depot", feature = "prebuilt"))
+))]
 use std::io::{self, Read};
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -22,29 +25,30 @@ pub fn depot_cmd(depot_tools_dir: &Path, cmd: &str) -> PathBuf {
 /// Download and initialize depot_tools (reusable)
 pub fn ensure_depot_tools(platform_dir: &Path) -> Result<PathBuf, Box<dyn std::error::Error>> {
     let depot_tools_dir = platform_dir.join("depot_tools");
-    
+
     // Check if depot_tools is already properly initialized
     let python_marker = depot_tools_dir.join("python3_bin_reldir.txt");
     let vpython3 = depot_cmd(&depot_tools_dir, "vpython3");
-    
+
     // If properly initialized, we can skip setup
     if python_marker.exists() && vpython3.exists() {
         return Ok(depot_tools_dir);
     }
-    
+
     // Git clone
     Command::new("git")
         .args(&[
             "clone",
-            "--depth", "1",
+            "--depth",
+            "1",
             "https://chromium.googlesource.com/chromium/tools/depot_tools.git",
             depot_tools_dir.to_str().unwrap(),
         ])
         .status()?;
-    
+
     // Initialize depot_tools on all platforms
     let update_script = depot_cmd(&depot_tools_dir, "update_depot_tools");
-    
+
     let status = if cfg!(windows) {
         Command::new("cmd")
             .args(&["/C", update_script.to_str().unwrap()])
@@ -55,18 +59,18 @@ pub fn ensure_depot_tools(platform_dir: &Path) -> Result<PathBuf, Box<dyn std::e
             .current_dir(&depot_tools_dir)
             .status()?
     };
-    
+
     if !status.success() {
         return Err("Failed to update depot_tools".into());
     }
-    
+
     // Run gclient to initialize Python environment
     let gclient = depot_cmd(&depot_tools_dir, "gclient");
     Command::new(&gclient)
         .arg("--version")
         .current_dir(&depot_tools_dir)
         .status()?;
-    
+
     // Create python3_bin_reldir.txt if it doesn't exist (Windows specific)
     #[cfg(windows)]
     {
@@ -75,7 +79,7 @@ pub fn ensure_depot_tools(platform_dir: &Path) -> Result<PathBuf, Box<dyn std::e
             fs::write(&python_file, "vpython3.bat")?;
         }
     }
-    
+
     Ok(depot_tools_dir)
 }
 
@@ -83,7 +87,10 @@ pub fn ensure_depot_tools(platform_dir: &Path) -> Result<PathBuf, Box<dyn std::e
 pub fn setup_depot_tools_env(depot_tools_dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
     let path = env::var("PATH").unwrap_or_default();
     let path_sep = if cfg!(windows) { ";" } else { ":" };
-    env::set_var("PATH", format!("{}{}{}", depot_tools_dir.display(), path_sep, path));
+    env::set_var(
+        "PATH",
+        format!("{}{}{}", depot_tools_dir.display(), path_sep, path),
+    );
     env::set_var("DEPOT_TOOLS_METRICS", "0");
     env::set_var("DEPOT_TOOLS_WIN_TOOLCHAIN", "0");
     Ok(())
@@ -119,7 +126,10 @@ const GN_VERSION: &str = "git_revision:5e19d2fb166fbd4f6f32147fbb2f497091a54ad8"
 const NINJA_VERSION: &str = "version:2@1.8.2.chromium.3";
 
 /// Manages build tool binaries (GN and Ninja)
-#[cfg(any(feature = "vendored", not(any(feature = "vendored", feature = "vendored-depot", feature = "prebuilt"))))]
+#[cfg(any(
+    feature = "vendored",
+    not(any(feature = "vendored", feature = "vendored-depot", feature = "prebuilt"))
+))]
 pub struct BinaryToolManager {
     cache_dir: PathBuf,
     platform: Platform,
@@ -127,7 +137,10 @@ pub struct BinaryToolManager {
 }
 
 #[derive(Debug, Clone)]
-#[cfg(any(feature = "vendored", not(any(feature = "vendored", feature = "vendored-depot", feature = "prebuilt"))))]
+#[cfg(any(
+    feature = "vendored",
+    not(any(feature = "vendored", feature = "vendored-depot", feature = "prebuilt"))
+))]
 enum Platform {
     MacX64,
     MacArm64,
@@ -135,7 +148,10 @@ enum Platform {
     WinX64,
 }
 
-#[cfg(any(feature = "vendored", not(any(feature = "vendored", feature = "vendored-depot", feature = "prebuilt"))))]
+#[cfg(any(
+    feature = "vendored",
+    not(any(feature = "vendored", feature = "vendored-depot", feature = "prebuilt"))
+))]
 impl Platform {
     fn detect() -> Result<Self, Box<dyn std::error::Error>> {
         let os = env::consts::OS;
@@ -180,7 +196,10 @@ impl Platform {
     }
 }
 
-#[cfg(any(feature = "vendored", not(any(feature = "vendored", feature = "vendored-depot", feature = "prebuilt"))))]
+#[cfg(any(
+    feature = "vendored",
+    not(any(feature = "vendored", feature = "vendored-depot", feature = "prebuilt"))
+))]
 impl BinaryToolManager {
     /// Create a new BinaryToolManager
     pub fn new(verbose: bool) -> Result<Self, Box<dyn std::error::Error>> {
