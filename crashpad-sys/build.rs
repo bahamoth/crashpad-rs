@@ -4,7 +4,10 @@
 #[path = "build/config.rs"]
 mod config;
 #[path = "build/depot_build.rs"]
-#[cfg(any(feature = "vendored-depot", not(any(feature = "vendored", feature = "vendored-depot", feature = "prebuilt"))))]
+#[cfg(any(
+    feature = "vendored-depot",
+    not(any(feature = "vendored", feature = "vendored-depot", feature = "prebuilt"))
+))]
 mod depot_build;
 #[path = "build/phases.rs"]
 mod phases;
@@ -14,9 +17,15 @@ mod prebuilt;
 #[path = "build/tools.rs"]
 mod tools;
 
-#[cfg(any(feature = "vendored", not(any(feature = "vendored", feature = "vendored-depot", feature = "prebuilt"))))]
+#[cfg(any(
+    feature = "vendored",
+    not(any(feature = "vendored", feature = "vendored-depot", feature = "prebuilt"))
+))]
 use config::BuildConfig;
-#[cfg(any(feature = "vendored", not(any(feature = "vendored", feature = "vendored-depot", feature = "prebuilt"))))]
+#[cfg(any(
+    feature = "vendored",
+    not(any(feature = "vendored", feature = "vendored-depot", feature = "prebuilt"))
+))]
 use phases::BuildPhases;
 
 fn main() {
@@ -126,9 +135,9 @@ fn main() {
     #[cfg(not(any(feature = "vendored", feature = "vendored-depot", feature = "prebuilt")))]
     {
         println!("cargo:warning=No build strategy specified, auto-selecting based on platform");
-        
+
         let target = std::env::var("TARGET").unwrap_or_default();
-        
+
         if target.contains("windows") {
             // Windows requires depot_tools for proper build
             println!("cargo:warning=Auto-selected vendored-depot strategy for Windows");
@@ -138,7 +147,10 @@ fn main() {
             }
         } else {
             // Linux/macOS/iOS/Android can all use vendored (standalone tools)
-            println!("cargo:warning=Auto-selected vendored strategy for {}", target);
+            println!(
+                "cargo:warning=Auto-selected vendored strategy for {}",
+                target
+            );
             if let Err(e) = run() {
                 eprintln!("Build failed: {e}");
                 std::process::exit(1);
@@ -147,7 +159,10 @@ fn main() {
     }
 }
 
-#[cfg(any(feature = "vendored", not(any(feature = "vendored", feature = "vendored-depot", feature = "prebuilt"))))]
+#[cfg(any(
+    feature = "vendored",
+    not(any(feature = "vendored", feature = "vendored-depot", feature = "prebuilt"))
+))]
 fn run() -> Result<(), Box<dyn std::error::Error>> {
     // Load platform configuration
     let config = BuildConfig::from_env()?;

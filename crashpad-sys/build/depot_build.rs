@@ -1,5 +1,5 @@
 /// Build Crashpad using depot_tools
-/// 
+///
 /// Uses official Crashpad build process for all platforms including Windows
 use std::env;
 use std::fs;
@@ -14,7 +14,7 @@ pub fn build_with_depot_tools() -> Result<(), Box<dyn std::error::Error>> {
     let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR")?);
     let target = env::var("TARGET")?;
     let profile = env::var("PROFILE").unwrap_or_else(|_| "debug".to_string());
-    
+
     // Step 1: Setup depot_tools (reusable)
     // Use platform-specific shared location for depot_tools
     let platform_dir = manifest_dir
@@ -24,7 +24,7 @@ pub fn build_with_depot_tools() -> Result<(), Box<dyn std::error::Error>> {
         .join(&target);
     let depot_tools_dir = ensure_depot_tools(&platform_dir)?;
     setup_depot_tools_env(&depot_tools_dir)?;
-    
+
     // Step 2: Build Crashpad with depot_tools (reusable for xtask)
     let build_dir = out_dir.join("depot_build");
     let build_output = build_crashpad_with_depot(
@@ -34,10 +34,10 @@ pub fn build_with_depot_tools() -> Result<(), Box<dyn std::error::Error>> {
         &target,
         &profile,
     )?;
-    
+
     // Step 3: Build crashpad-rs-sys (wrapper, bindgen, link)
     build_crashpad_sys(&build_output, &target)?;
-    
+
     Ok(())
 }
 
@@ -60,7 +60,7 @@ pub fn build_crashpad_with_depot(
         fs::remove_dir_all(&build_dir)?;
     }
     fs::create_dir_all(&build_dir)?;
-    
+
     // Create .gclient file
     let gclient_content = r#"solutions = [
   {
@@ -72,7 +72,7 @@ pub fn build_crashpad_with_depot(
   },
 ]"#;
     fs::write(build_dir.join(".gclient"), gclient_content)?;
-    
+
     // Run gclient sync
     let gclient = depot_cmd(depot_tools_dir, "gclient");
     let status = Command::new(&gclient)
@@ -80,33 +80,44 @@ pub fn build_crashpad_with_depot(
         .current_dir(&build_dir)
         .env("DEPOT_TOOLS_WIN_TOOLCHAIN", "0")
         .status()?;
-    
+
     if !status.success() {
         return Err("gclient sync failed".into());
     }
-    
+
     let crashpad_dir = build_dir.join("crashpad");
-    
+
     // Copy crashpad_wrapper.cc
     fs::copy(
         manifest_dir.join("crashpad_wrapper.cc"),
         crashpad_dir.join("crashpad_wrapper.cc"),
     )?;
-    
+
     // Configure GN build args
     let mut gn_args = vec![
-        format!("is_debug={}", if profile == "debug" { "true" } else { "false" }),
+        format!(
+            "is_debug={}",
+            if profile == "debug" { "true" } else { "false" }
+        ),
         "crashpad_build_tests=false".to_string(),
     ];
-    
+
     if target.contains("windows") {
         gn_args.push("target_os=\"win\"".to_string());
-        gn_args.push(format!("target_cpu=\"{}\"", 
-            if target.contains("x86_64") { "x64" } else { "x86" }));
-        gn_args.push(format!("extra_cflags=\"{}\"",
-            if profile == "debug" { "/MDd" } else { "/MD" }));
+        gn_args.push(format!(
+            "target_cpu=\"{}\"",
+            if target.contains("x86_64") {
+                "x64"
+            } else {
+                "x86"
+            }
+        ));
+        gn_args.push(format!(
+            "extra_cflags=\"{}\"",
+            if profile == "debug" { "/MDd" } else { "/MD" }
+        ));
     }
-    
+
     // Configure output directory to be in target/{target}/{profile}/crashpad_build
     let final_build_dir = manifest_dir
         .parent()
@@ -115,37 +126,44 @@ pub fn build_crashpad_with_depot(
         .join(&target)
         .join(&profile)
         .join("crashpad_build");
-    
+
     // Create the output directory if it doesn't exist
     fs::create_dir_all(&final_build_dir)?;
-    
+
     // Run GN gen with absolute output path
     let gn = depot_cmd(depot_tools_dir, "gn");
     let status = Command::new(&gn)
-        .args(&["gen", final_build_dir.to_str().unwrap(), &format!("--args={}", gn_args.join(" "))])
+        .args(&[
+            "gen",
+            final_build_dir.to_str().unwrap(),
+            &format!("--args={}", gn_args.join(" ")),
+        ])
         .current_dir(&crashpad_dir)
         .status()?;
-    
+
     if !status.success() {
         return Err("gn gen failed".into());
     }
-    
+
     // Run Ninja build - explicitly build library targets
     let ninja = depot_cmd(depot_tools_dir, "ninja");
     let status = Command::new(&ninja)
-        .args(&["-C", final_build_dir.to_str().unwrap(), 
-                "client:client",
-                "client:common", 
-                "util:util",
-                "third_party/mini_chromium/mini_chromium/base:base",
-                "handler:crashpad_handler"])
+        .args(&[
+            "-C",
+            final_build_dir.to_str().unwrap(),
+            "client:client",
+            "client:common",
+            "util:util",
+            "third_party/mini_chromium/mini_chromium/base:base",
+            "handler:crashpad_handler",
+        ])
         .current_dir(&crashpad_dir)
         .status()?;
-    
+
     if !status.success() {
         return Err("ninja build failed".into());
     }
-    
+
     Ok(CrashpadBuildOutput {
         build_out_dir: final_build_dir,
         crashpad_dir,
@@ -160,31 +178,34 @@ pub fn build_crashpad_sys(
 ) -> Result<(), Box<dyn std::error::Error>> {
     use crate::config::BuildConfig;
     use crate::phases::BuildPhases;
-    
+
     // Create proper config using from_env() to get all platform-specific settings
     let mut config = BuildConfig::from_env()?;
-    
+
     // Override paths to point to our depot-built Crashpad
     config.crashpad_dir = build_output.crashpad_dir.clone();
-    
+
     // Use phases for wrapper compilation, bindgen, and linking
     let phases = BuildPhases::new(config);
-    
+
     // Skip prepare/configure/build - we already built with depot_tools
     // Just run wrapper, package, bindgen, and emit_link
     phases.wrapper()?;
     phases.package()?;
     phases.bindgen()?;
     phases.emit_link()?;
-    
+
     // Copy handler to final target directory
     copy_handler_to_target(&build_output.build_out_dir, target)?;
-    
+
     Ok(())
 }
 
 /// Copy crashpad_handler to target directory for distribution
-fn copy_handler_to_target(build_dir: &Path, target: &str) -> Result<(), Box<dyn std::error::Error>> {
+fn copy_handler_to_target(
+    build_dir: &Path,
+    target: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
     // iOS doesn't have external handler
     if target.contains("ios") {
         return Ok(());
@@ -200,7 +221,10 @@ fn copy_handler_to_target(build_dir: &Path, target: &str) -> Result<(), Box<dyn 
 
     // Skip if handler wasn't built
     if !handler_src.exists() {
-        println!("cargo:warning=Handler not found at {}, skipping copy", handler_src.display());
+        println!(
+            "cargo:warning=Handler not found at {}, skipping copy",
+            handler_src.display()
+        );
         return Ok(());
     }
 
@@ -236,7 +260,11 @@ fn copy_handler_to_target(build_dir: &Path, target: &str) -> Result<(), Box<dyn 
         target_dir.join("crashpad_handler")
     };
 
-    println!("cargo:warning=Copying handler from {} to {}", handler_src.display(), handler_dest.display());
+    println!(
+        "cargo:warning=Copying handler from {} to {}",
+        handler_src.display(),
+        handler_dest.display()
+    );
     fs::copy(&handler_src, &handler_dest)?;
 
     // Set executable permissions on Unix
@@ -248,8 +276,10 @@ fn copy_handler_to_target(build_dir: &Path, target: &str) -> Result<(), Box<dyn 
         fs::set_permissions(&handler_dest, perms)?;
     }
 
-    println!("cargo:rustc-env=CRASHPAD_HANDLER_PATH={}", handler_dest.display());
-    
+    println!(
+        "cargo:rustc-env=CRASHPAD_HANDLER_PATH={}",
+        handler_dest.display()
+    );
+
     Ok(())
 }
-
