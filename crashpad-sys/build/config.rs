@@ -19,11 +19,15 @@ pub struct BuildConfig {
     // Paths
     pub crashpad_dir: PathBuf,
 
-    // Platform-specific unified settings
+    // Compiler settings (for wrapper compilation with cc crate)
     pub compiler: PathBuf,
     pub archiver: String,
     pub cxx_flags: Vec<String>,
+    
+    // GN build settings (only for vendored build, not depot_tools)
     pub gn_args: HashMap<String, String>,
+    
+    // Linking settings (always needed)
     pub link_libs: Vec<String>,
     pub crashpad_libs: Vec<String>, // Crashpad static libraries to link
     pub frameworks: Vec<String>,    // iOS/macOS only
@@ -280,9 +284,9 @@ impl BuildConfig {
 
     /// Configure for Windows
     ///
-    /// Windows build uses Visual Studio's Clang/LLVM toolchain by default.
-    /// MinGW is not supported because Crashpad relies on Windows-specific
-    /// features that are only available with MSVC toolchain.
+    /// Windows build configuration is split:
+    /// - GN args: Only used for vendored build (not depot_tools)
+    /// - Compiler/Link settings: Always used for wrapper and linking
     fn setup_windows(&mut self, target: &str) -> Result<(), Box<dyn std::error::Error>> {
         if !target.contains("msvc") {
             return Err(
@@ -302,14 +306,11 @@ impl BuildConfig {
             .into());
         };
 
+        // ===== GN build configuration (only for vendored build) =====
         self.gn_args
             .insert("target_os".to_string(), "\"win\"".to_string());
         self.gn_args
             .insert("target_cpu".to_string(), format!("\"{arch}\""));
-
-        // Use Clang (default for Chromium/Crashpad on Windows)
-        // GN will use win_helper.py to find Visual Studio's Clang automatically
-        // mini_chromium_is_clang is true by default
 
         // Use dynamic CRT (/MD) to match Rust's default
         // This prevents LNK2038 runtime library mismatch errors
@@ -327,12 +328,30 @@ impl BuildConfig {
                 .insert("extra_cflags".to_string(), "\"/MDd\"".to_string());
         }
 
-        // Windows-specific libraries
+        // ===== Compiler configuration (for wrapper compilation) =====
+        // The cc crate will automatically find MSVC
+        self.compiler = PathBuf::from("cl.exe");
+        self.archiver = "lib".to_string();
+        
+        // CC flags for wrapper compilation
+        // Note: cc crate handles most flags automatically
+        self.cxx_flags = vec![];
+
+        // ===== Linking configuration (always needed) =====
+        // Windows-specific system libraries
         self.link_libs = vec![
             "advapi32".to_string(),
             "kernel32".to_string(),
             "user32".to_string(),
             "winmm".to_string(),
+        ];
+        
+        // Crashpad libraries (same for all build strategies)
+        self.crashpad_libs = vec![
+            "client".to_string(),
+            "common".to_string(),
+            "util".to_string(),
+            "base".to_string(),
         ];
 
         Ok(())

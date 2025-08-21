@@ -40,6 +40,7 @@ clean:
 	rm -rf target/
 	# Clean binary tool cache (optional, commented out by default)
 	# rm -rf ~/.crashpad-cache
+	rm -rf crashpad-sys/third_party/crashpad/third_party/
 	cargo clean
 
 rebuild: clean build

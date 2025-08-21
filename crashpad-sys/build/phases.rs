@@ -1,14 +1,22 @@
 use std::env;
+#[cfg(any(
+    windows,
+    feature = "vendored",
+    not(any(feature = "vendored", feature = "vendored-depot", feature = "prebuilt"))
+))]
 use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
 
 use crate::config::BuildConfig;
+#[cfg(any(feature = "vendored", not(any(feature = "vendored", feature = "vendored-depot", feature = "prebuilt"))))]
 use crate::tools::BinaryToolManager;
 
 pub struct BuildPhases {
     config: BuildConfig,
+    #[allow(dead_code)]
     gn_path: Option<PathBuf>,
+    #[allow(dead_code)]
     ninja_path: Option<PathBuf>,
 }
 
@@ -23,6 +31,7 @@ impl BuildPhases {
     }
 
     /// Phase 1: Prepare dependencies (ensure build tools are available)
+    #[cfg(any(feature = "vendored", not(any(feature = "vendored", feature = "vendored-depot", feature = "prebuilt"))))]
     pub fn prepare(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         // Ensure crashpad directory exists and has required files
         if !self.config.crashpad_dir.exists() {
@@ -65,6 +74,7 @@ impl BuildPhases {
     }
 
     /// Phase 2: Configure build with GN
+    #[cfg(any(feature = "vendored", not(any(feature = "vendored", feature = "vendored-depot", feature = "prebuilt"))))]
     pub fn configure(&self) -> Result<(), Box<dyn std::error::Error>> {
         let build_dir = self.config.build_dir();
 
@@ -128,6 +138,7 @@ impl BuildPhases {
     }
 
     /// Phase 3: Build with Ninja
+    #[cfg(any(feature = "vendored", not(any(feature = "vendored", feature = "vendored-depot", feature = "prebuilt"))))]
     pub fn build(&self) -> Result<(), Box<dyn std::error::Error>> {
         let build_dir = self.config.build_dir();
 
@@ -543,6 +554,7 @@ impl BuildPhases {
     }
 
     /// Copy crashpad_handler to target directory for consistent access
+    #[cfg(any(feature = "vendored", not(any(feature = "vendored", feature = "vendored-depot", feature = "prebuilt"))))]
     fn copy_handler_to_target(&self) -> Result<(), Box<dyn std::error::Error>> {
         // iOS doesn't have external handler
         if self.config.target.contains("ios") {
@@ -628,6 +640,7 @@ impl BuildPhases {
     }
 
     /// Create symlinks/junctions for dependencies
+    #[cfg(any(feature = "vendored", not(any(feature = "vendored", feature = "vendored-depot", feature = "prebuilt"))))]
     fn create_dependency_links(&self) -> Result<(), Box<dyn std::error::Error>> {
         let deps = vec![
             ("mini_chromium", "mini_chromium"),
@@ -686,6 +699,7 @@ impl BuildPhases {
 
     /// Copy directory recursively (Windows fallback for symlinks)
     #[cfg(windows)]
+    #[cfg(any(feature = "vendored", not(any(feature = "vendored", feature = "vendored-depot", feature = "prebuilt"))))]
     fn copy_directory(
         src: &std::path::Path,
         dst: &std::path::Path,
@@ -710,6 +724,7 @@ impl BuildPhases {
 
     /// Setup python3 alias for Windows
     #[cfg(windows)]
+    #[cfg(any(feature = "vendored", not(any(feature = "vendored", feature = "vendored-depot", feature = "prebuilt"))))]
     fn setup_python3_alias(&self) -> Result<(), Box<dyn std::error::Error>> {
         use std::process::Command;
 
