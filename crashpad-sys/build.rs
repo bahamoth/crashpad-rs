@@ -4,7 +4,7 @@
 #[path = "build/config.rs"]
 mod config;
 #[path = "build/depot_build.rs"]
-#[cfg(feature = "vendored-depot")]
+#[cfg(any(feature = "vendored-depot", not(any(feature = "vendored", feature = "vendored-depot", feature = "prebuilt"))))]
 mod depot_build;
 #[path = "build/phases.rs"]
 mod phases;
@@ -14,7 +14,9 @@ mod prebuilt;
 #[path = "build/tools.rs"]
 mod tools;
 
+#[cfg(any(feature = "vendored", not(any(feature = "vendored", feature = "vendored-depot", feature = "prebuilt"))))]
 use config::BuildConfig;
+#[cfg(any(feature = "vendored", not(any(feature = "vendored", feature = "vendored-depot", feature = "prebuilt"))))]
 use phases::BuildPhases;
 
 fn main() {
@@ -93,9 +95,16 @@ fn main() {
     #[cfg(all(not(feature = "prebuilt"), feature = "vendored-depot"))]
     {
         println!("cargo:warning=Using vendored-depot strategy");
-        if let Err(e) = depot_build::build_with_depot_tools() {
-            eprintln!("depot_tools build failed: {e}");
-            std::process::exit(1);
+        println!("cargo:warning=[BUILD.RS] Starting depot_build::build_with_depot_tools()");
+        match depot_build::build_with_depot_tools() {
+            Ok(_) => {
+                println!("cargo:warning=[BUILD.RS] depot_build completed successfully");
+            }
+            Err(e) => {
+                println!("cargo:warning=[BUILD.RS] depot_tools build failed: {}", e);
+                println!("cargo:warning=[BUILD.RS] Error details: {:?}", e);
+                std::process::exit(1);
+            }
         }
         return;
     }
@@ -113,23 +122,32 @@ fn main() {
         }
     }
 
-    // No feature selected - provide helpful error
+    // No feature selected - auto-select based on platform
     #[cfg(not(any(feature = "vendored", feature = "vendored-depot", feature = "prebuilt")))]
     {
-        eprintln!("Error: No build strategy selected!");
-        eprintln!();
-        eprintln!("You must select one of the following features:");
-        eprintln!("  --features vendored       : Build from source (Linux/macOS only)");
-        eprintln!(
-            "  --features vendored-depot : Build from source using depot_tools (all platforms)"
-        );
-        eprintln!("  --features prebuilt       : Download pre-built binaries");
-        eprintln!();
-        eprintln!("Example: cargo build --features vendored");
-        std::process::exit(1);
+        println!("cargo:warning=No build strategy specified, auto-selecting based on platform");
+        
+        let target = std::env::var("TARGET").unwrap_or_default();
+        
+        if target.contains("windows") {
+            // Windows requires depot_tools for proper build
+            println!("cargo:warning=Auto-selected vendored-depot strategy for Windows");
+            if let Err(e) = depot_build::build_with_depot_tools() {
+                eprintln!("depot_tools build failed: {e}");
+                std::process::exit(1);
+            }
+        } else {
+            // Linux/macOS/iOS/Android can all use vendored (standalone tools)
+            println!("cargo:warning=Auto-selected vendored strategy for {}", target);
+            if let Err(e) = run() {
+                eprintln!("Build failed: {e}");
+                std::process::exit(1);
+            }
+        }
     }
 }
 
+#[cfg(any(feature = "vendored", not(any(feature = "vendored", feature = "vendored-depot", feature = "prebuilt"))))]
 fn run() -> Result<(), Box<dyn std::error::Error>> {
     // Load platform configuration
     let config = BuildConfig::from_env()?;

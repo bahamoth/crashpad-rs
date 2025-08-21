@@ -13,6 +13,12 @@ readme = { workspace = true }
 keywords = { workspace = true }
 categories = { workspace = true }
 
+[features]
+# Forward build strategy features to crashpad-rs-sys
+vendored = ["crashpad-rs-sys/vendored"]
+vendored-depot = ["crashpad-rs-sys/vendored-depot"]
+prebuilt = ["crashpad-rs-sys/prebuilt"]
+
 [dependencies]
 crashpad-rs-sys = { path = "../crashpad-sys", version = "0.2.5" }
 thiserror = { workspace = true }
