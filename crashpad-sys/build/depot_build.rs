@@ -1,6 +1,9 @@
+#![allow(dead_code)]
+
 /// Build Crashpad using depot_tools
 ///
 /// Uses official Crashpad build process for all platforms including Windows
+
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -15,8 +18,7 @@ pub fn build_with_depot_tools() -> Result<(), Box<dyn std::error::Error>> {
     let target = env::var("TARGET")?;
     let profile = env::var("PROFILE").unwrap_or_else(|_| "debug".to_string());
 
-    // Step 1: Setup depot_tools (reusable)
-    // Use platform-specific shared location for depot_tools
+    // Step 1: Setup depot_tools
     let platform_dir = manifest_dir
         .parent()
         .expect("Failed to get parent directory")
@@ -25,7 +27,7 @@ pub fn build_with_depot_tools() -> Result<(), Box<dyn std::error::Error>> {
     let depot_tools_dir = ensure_depot_tools(&platform_dir)?;
     setup_depot_tools_env(&depot_tools_dir)?;
 
-    // Step 2: Build Crashpad with depot_tools (reusable for xtask)
+    // Step 2: Build Crashpad with depot_tools
     let build_dir = out_dir.join("depot_build");
     let build_output = build_crashpad_with_depot(
         &depot_tools_dir,
@@ -35,7 +37,7 @@ pub fn build_with_depot_tools() -> Result<(), Box<dyn std::error::Error>> {
         &profile,
     )?;
 
-    // Step 3: Build crashpad-rs-sys (wrapper, bindgen, link)
+    // Step 3: Build crashpad-rs-sys
     build_crashpad_sys(&build_output, &target)?;
 
     Ok(())
@@ -47,7 +49,7 @@ pub struct CrashpadBuildOutput {
     pub build_out_dir: PathBuf,
 }
 
-/// Build Crashpad using depot_tools (reusable for xtask)
+/// Build Crashpad using depot_tools
 pub fn build_crashpad_with_depot(
     depot_tools_dir: &Path,
     build_dir: &Path,
@@ -57,9 +59,9 @@ pub fn build_crashpad_with_depot(
 ) -> Result<CrashpadBuildOutput, Box<dyn std::error::Error>> {
     // Clean and create work directory
     if build_dir.exists() {
-        fs::remove_dir_all(&build_dir)?;
+        fs::remove_dir_all(build_dir)?;
     }
-    fs::create_dir_all(&build_dir)?;
+    fs::create_dir_all(build_dir)?;
 
     // Create .gclient file
     let gclient_content = r#"solutions = [
@@ -76,8 +78,8 @@ pub fn build_crashpad_with_depot(
     // Run gclient sync
     let gclient = depot_cmd(depot_tools_dir, "gclient");
     let status = Command::new(&gclient)
-        .args(&["sync", "--no-history"])
-        .current_dir(&build_dir)
+        .args(["sync", "--no-history"])
+        .current_dir(build_dir)
         .env("DEPOT_TOOLS_WIN_TOOLCHAIN", "0")
         .status()?;
 
@@ -123,8 +125,8 @@ pub fn build_crashpad_with_depot(
         .parent()
         .expect("Failed to get parent directory")
         .join("target")
-        .join(&target)
-        .join(&profile)
+        .join(target)
+        .join(profile)
         .join("crashpad_build");
 
     // Create the output directory if it doesn't exist
@@ -133,7 +135,7 @@ pub fn build_crashpad_with_depot(
     // Run GN gen with absolute output path
     let gn = depot_cmd(depot_tools_dir, "gn");
     let status = Command::new(&gn)
-        .args(&[
+        .args([
             "gen",
             final_build_dir.to_str().unwrap(),
             &format!("--args={}", gn_args.join(" ")),
@@ -148,7 +150,7 @@ pub fn build_crashpad_with_depot(
     // Run Ninja build - explicitly build library targets
     let ninja = depot_cmd(depot_tools_dir, "ninja");
     let status = Command::new(&ninja)
-        .args(&[
+        .args([
             "-C",
             final_build_dir.to_str().unwrap(),
             "client:client",

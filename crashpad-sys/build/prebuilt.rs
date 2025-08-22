@@ -14,21 +14,18 @@ pub fn download_and_link() -> Result<(), Box<dyn std::error::Error>> {
 
     eprintln!("Using prebuilt binaries for {} v{}", target, version);
 
-    // 캐시 디렉토리 - cache 모듈 사용
+    // 캐시 디렉토리
     let cache_dir = crate::cache::prebuilt_dir(&version, &target);
 
-    // 이미 다운로드되어 있는지 확인
     let marker_file = cache_dir.join(".crashpad-ok");
     if !marker_file.exists() {
-        // 다운로드 및 압축 해제
         download_prebuilt(&version, &target, &cache_dir)?;
         fs::write(&marker_file, "")?;
     }
-    
+
     eprintln!("Using cached prebuilt from: {}", cache_dir.display());
-    
-    // 캐시 디렉토리를 OUT_DIR로 직접 사용
-    // bindings.rs는 이미 캐시에 있음
+
+    // Copy bindings.rs from cache
     let bindings_src = cache_dir.join("bindings.rs");
     let bindings_dst = out_dir.join("bindings.rs");
     if bindings_src.exists() {
@@ -37,10 +34,10 @@ pub fn download_and_link() -> Result<(), Box<dyn std::error::Error>> {
     } else {
         eprintln!("Warning: bindings.rs not found in prebuilt package");
     }
-    
-    // 링크 설정 - 캐시 디렉토리를 직접 참조
+
+    // 링크 설정
     setup_link_flags(&cache_dir, &target)?;
-    
+
     // Copy handler to target directory for distribution
     copy_handler_to_target(&cache_dir, &target)?;
 
@@ -131,8 +128,6 @@ fn extract_archive(archive_path: &Path, dest_dir: &Path) -> Result<(), Box<dyn s
     Ok(())
 }
 
-
-
 /// 링크 플래그 설정
 fn setup_link_flags(cache_dir: &Path, target: &str) -> Result<(), Box<dyn std::error::Error>> {
     // 라이브러리 검색 경로
@@ -144,7 +139,7 @@ fn setup_link_flags(cache_dir: &Path, target: &str) -> Result<(), Box<dyn std::e
         if lib_dir.exists() {
             println!("cargo:rustc-link-search={}", lib_dir.display());
         }
-        
+
         // Link all necessary libraries in dependency order
         println!("cargo:rustc-link-lib=static=crashpad_wrapper");
         println!("cargo:rustc-link-lib=static=client");
@@ -214,7 +209,7 @@ fn copy_handler_to_target(
     };
 
     let handler_src = cache_dir.join(handler_name);
-    
+
     // Skip if handler doesn't exist
     if !handler_src.exists() {
         eprintln!("Warning: Handler not found at {}", handler_src.display());
@@ -245,7 +240,7 @@ fn copy_handler_to_target(
     fs::create_dir_all(&target_dir)?;
 
     let handler_dest = target_dir.join(handler_name);
-    
+
     eprintln!(
         "Copying handler from {} to {}",
         handler_src.display(),
