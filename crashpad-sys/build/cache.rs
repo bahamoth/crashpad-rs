@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 /// Unified cache directory management for crashpad-rs
 ///
 /// Simple module to provide consistent cache paths across all build methods
@@ -5,7 +7,7 @@ use std::env;
 use std::path::PathBuf;
 
 /// Get cache root directory
-/// 
+///
 /// Priority:
 /// 1. CRASHPAD_CACHE_DIR environment variable
 /// 2. System cache directory + "crashpad-rs"
@@ -29,8 +31,5 @@ pub fn tools_dir() -> PathBuf {
 
 /// Get prebuilt cache directory
 pub fn prebuilt_dir(version: &str, target: &str) -> PathBuf {
-    cache_root()
-        .join("prebuilt")
-        .join(version)
-        .join(target)
+    cache_root().join("prebuilt").join(version).join(target)
 }

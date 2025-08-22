@@ -1,3 +1,6 @@
+#![allow(dead_code)]
+#![allow(unused_imports)]
+
 /// Build tool management for Crashpad compilation
 ///
 /// This module handles two strategies:
@@ -5,10 +8,6 @@
 /// 2. depot_tools - for vendored-depot builds (required on Windows)
 use std::env;
 use std::fs;
-#[cfg(any(
-    feature = "vendored",
-    not(any(feature = "vendored", feature = "vendored-depot", feature = "prebuilt"))
-))]
 use std::io::{self, Read};
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -37,7 +36,7 @@ pub fn ensure_depot_tools(platform_dir: &Path) -> Result<PathBuf, Box<dyn std::e
 
     // Git clone
     Command::new("git")
-        .args(&[
+        .args([
             "clone",
             "--depth",
             "1",
@@ -51,7 +50,7 @@ pub fn ensure_depot_tools(platform_dir: &Path) -> Result<PathBuf, Box<dyn std::e
 
     let status = if cfg!(windows) {
         Command::new("cmd")
-            .args(&["/C", update_script.to_str().unwrap()])
+            .args(["/C", update_script.to_str().unwrap()])
             .current_dir(&depot_tools_dir)
             .status()?
     } else {
@@ -120,16 +119,10 @@ pub fn setup_depot_tools_env(depot_tools_dir: &Path) -> Result<(), Box<dyn std::
 ///
 /// These versions should be updated whenever Crashpad submodule is updated
 /// to ensure compatibility with the build configuration.
-#[allow(dead_code)]
 const GN_VERSION: &str = "git_revision:5e19d2fb166fbd4f6f32147fbb2f497091a54ad8";
-#[allow(dead_code)]
 const NINJA_VERSION: &str = "version:2@1.8.2.chromium.3";
 
 /// Manages build tool binaries (GN and Ninja)
-#[cfg(any(
-    feature = "vendored",
-    not(any(feature = "vendored", feature = "vendored-depot", feature = "prebuilt"))
-))]
 pub struct BinaryToolManager {
     cache_dir: PathBuf,
     platform: Platform,
@@ -137,10 +130,6 @@ pub struct BinaryToolManager {
 }
 
 #[derive(Debug, Clone)]
-#[cfg(any(
-    feature = "vendored",
-    not(any(feature = "vendored", feature = "vendored-depot", feature = "prebuilt"))
-))]
 enum Platform {
     MacX64,
     MacArm64,
@@ -148,10 +137,6 @@ enum Platform {
     WinX64,
 }
 
-#[cfg(any(
-    feature = "vendored",
-    not(any(feature = "vendored", feature = "vendored-depot", feature = "prebuilt"))
-))]
 impl Platform {
     fn detect() -> Result<Self, Box<dyn std::error::Error>> {
         let os = env::consts::OS;
@@ -196,10 +181,6 @@ impl Platform {
     }
 }
 
-#[cfg(any(
-    feature = "vendored",
-    not(any(feature = "vendored", feature = "vendored-depot", feature = "prebuilt"))
-))]
 impl BinaryToolManager {
     /// Create a new BinaryToolManager
     pub fn new(verbose: bool) -> Result<Self, Box<dyn std::error::Error>> {

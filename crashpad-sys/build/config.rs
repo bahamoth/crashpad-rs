@@ -1,8 +1,5 @@
-/// Platform configuration management
-///
-/// This module centralizes all platform-specific build settings.
-/// It detects the target platform and configures all necessary build parameters
-/// in one place, ensuring consistency between GN args and compiler flags.
+#![allow(dead_code)]
+
 use std::collections::HashMap;
 use std::env;
 use std::path::PathBuf;
@@ -283,10 +280,6 @@ impl BuildConfig {
     }
 
     /// Configure for Windows
-    ///
-    /// Windows build configuration is split:
-    /// - GN args: Only used for vendored build (not depot_tools)
-    /// - Compiler/Link settings: Always used for wrapper and linking
     fn setup_windows(&mut self, target: &str) -> Result<(), Box<dyn std::error::Error>> {
         if !target.contains("msvc") {
             return Err(
@@ -306,7 +299,7 @@ impl BuildConfig {
             .into());
         };
 
-        // ===== GN build configuration (only for vendored build) =====
+        // GN build configuration
         self.gn_args
             .insert("target_os".to_string(), "\"win\"".to_string());
         self.gn_args
@@ -328,8 +321,7 @@ impl BuildConfig {
                 .insert("extra_cflags".to_string(), "\"/MDd\"".to_string());
         }
 
-        // ===== Compiler configuration (for wrapper compilation) =====
-        // The cc crate will automatically find MSVC
+        // Compiler configuration
         self.compiler = PathBuf::from("cl.exe");
         self.archiver = "lib".to_string();
 
@@ -337,8 +329,7 @@ impl BuildConfig {
         // Note: cc crate handles most flags automatically
         self.cxx_flags = vec![];
 
-        // ===== Linking configuration (always needed) =====
-        // Windows-specific system libraries
+        // Linking configuration
         self.link_libs = vec![
             "advapi32".to_string(),
             "kernel32".to_string(),
@@ -346,7 +337,7 @@ impl BuildConfig {
             "winmm".to_string(),
         ];
 
-        // Crashpad libraries (same for all build strategies)
+        // Crashpad libraries
         self.crashpad_libs = vec![
             "client".to_string(),
             "common".to_string(),
@@ -373,6 +364,16 @@ impl BuildConfig {
             .insert("target_os".to_string(), "\"linux\"".to_string());
         self.gn_args
             .insert("target_cpu".to_string(), format!("\"{arch}\""));
+
+        // Set compiler
+        self.compiler = PathBuf::from("clang++");
+
+        // Add target triple for cross-compilation
+        let host = env::var("HOST").unwrap_or_default();
+        if !host.is_empty() && host != target {
+            // Cross-compiling: add target triple
+            self.cxx_flags.push(format!("--target={}", target));
+        }
 
         // Add PIC flag for Linux
         self.cxx_flags.push("-fPIC".to_string());
