@@ -14,13 +14,8 @@ pub fn download_and_link() -> Result<(), Box<dyn std::error::Error>> {
 
     eprintln!("Using prebuilt binaries for {} v{}", target, version);
 
-    // 캐시 디렉토리 - xtask build-prebuilt과 동일한 위치 사용
-    let cache_dir = dirs::cache_dir()
-        .ok_or("Failed to determine cache directory")?
-        .join("crashpad-build-tools")
-        .join("prebuilt")
-        .join(&version)
-        .join(&target);
+    // 캐시 디렉토리 - cache 모듈 사용
+    let cache_dir = crate::cache::prebuilt_dir(&version, &target);
 
     // 이미 다운로드되어 있는지 확인
     let marker_file = cache_dir.join(".crashpad-ok");
@@ -45,6 +40,9 @@ pub fn download_and_link() -> Result<(), Box<dyn std::error::Error>> {
     
     // 링크 설정 - 캐시 디렉토리를 직접 참조
     setup_link_flags(&cache_dir, &target)?;
+    
+    // Copy handler to target directory for distribution
+    copy_handler_to_target(&cache_dir, &target)?;
 
     eprintln!("Prebuilt setup completed");
     Ok(())
@@ -194,5 +192,76 @@ fn setup_link_flags(cache_dir: &Path, target: &str) -> Result<(), Box<dyn std::e
         handler_path.display()
     );
 
+    Ok(())
+}
+
+/// Copy crashpad_handler to target directory for distribution
+fn copy_handler_to_target(
+    cache_dir: &Path,
+    target: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
+    // iOS doesn't have external handler
+    if target.contains("ios") {
+        return Ok(());
+    }
+
+    let handler_name = if target.contains("windows") {
+        "crashpad_handler.exe"
+    } else if target.contains("android") {
+        "libcrashpad_handler.so"
+    } else {
+        "crashpad_handler"
+    };
+
+    let handler_src = cache_dir.join(handler_name);
+    
+    // Skip if handler doesn't exist
+    if !handler_src.exists() {
+        eprintln!("Warning: Handler not found at {}", handler_src.display());
+        return Ok(());
+    }
+
+    // Determine target directory
+    let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR")?);
+    let profile = env::var("PROFILE").unwrap_or_else(|_| "debug".to_string());
+    let host = env::var("HOST").unwrap_or_else(|_| target.to_string());
+    let is_cross_compile = host != target;
+
+    let target_dir = if is_cross_compile {
+        manifest_dir
+            .parent()
+            .ok_or("Failed to get parent directory")?
+            .join("target")
+            .join(target)
+            .join(&profile)
+    } else {
+        manifest_dir
+            .parent()
+            .ok_or("Failed to get parent directory")?
+            .join("target")
+            .join(&profile)
+    };
+
+    fs::create_dir_all(&target_dir)?;
+
+    let handler_dest = target_dir.join(handler_name);
+    
+    eprintln!(
+        "Copying handler from {} to {}",
+        handler_src.display(),
+        handler_dest.display()
+    );
+    fs::copy(&handler_src, &handler_dest)?;
+
+    // Set executable permissions on Unix
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mut perms = fs::metadata(&handler_dest)?.permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&handler_dest, perms)?;
+    }
+
+    eprintln!("Handler copied to target directory");
     Ok(())
 }

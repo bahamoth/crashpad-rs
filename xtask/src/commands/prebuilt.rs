@@ -168,9 +168,13 @@ pub fn build_prebuilt(sh: &Shell, target: Option<String>) -> Result<()> {
 
     // Simulate GitHub download by copying to cache and extracting
     println!("\n📥 Simulating GitHub download to cache...");
-    let cache_dir = dirs::cache_dir()
-        .context("Failed to determine cache directory")?
-        .join("crashpad-build-tools")
+    let cache_dir = std::env::var("CRASHPAD_CACHE_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| {
+            dirs::cache_dir()
+                .unwrap_or_else(|| PathBuf::from(".cache"))
+                .join("crashpad-rs")
+        })
         .join("prebuilt")
         .join(&version)
         .join(&target);

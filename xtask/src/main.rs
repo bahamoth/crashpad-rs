@@ -6,7 +6,7 @@ use clap::{Parser, Subcommand};
 use xshell::Shell;
 
 use commands::{
-    build, build_prebuilt, clean, create_symlinks, dist, install_tools, test, update_deps,
+    build, build_prebuilt, create_symlinks, dist, install_tools, test, update_deps,
 };
 
 #[derive(Parser)]
@@ -28,8 +28,6 @@ enum Commands {
     Dist,
     /// Run tests
     Test,
-    /// Clean all build artifacts and caches
-    Clean,
     /// Install external development tools
     InstallTools,
     /// Update submodules to match Crashpad's DEPS
@@ -56,7 +54,6 @@ fn main() -> Result<()> {
         Commands::Build { release } => build(&sh, release)?,
         Commands::Dist => dist(&sh)?,
         Commands::Test => test(&sh)?,
-        Commands::Clean => clean(&sh)?,
         Commands::InstallTools => install_tools(&sh)?,
         Commands::UpdateDeps { create_pr } => update_deps(&sh, create_pr)?,
         Commands::Symlink => create_symlinks(&sh)?,

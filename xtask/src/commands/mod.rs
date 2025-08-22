@@ -1,5 +1,4 @@
 pub mod build;
-pub mod clean;
 pub mod deps;
 pub mod dist;
 pub mod prebuilt;
@@ -8,7 +7,6 @@ pub mod test;
 pub mod tools;
 
 pub use build::build;
-pub use clean::clean;
 pub use deps::update_deps;
 pub use dist::dist;
 pub use prebuilt::build_prebuilt;
