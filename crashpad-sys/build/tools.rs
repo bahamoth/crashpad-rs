@@ -205,18 +205,8 @@ impl BinaryToolManager {
     pub fn new(verbose: bool) -> Result<Self, Box<dyn std::error::Error>> {
         let platform = Platform::detect()?;
 
-        // Platform-specific cache directory
-        let platform_dir = format!("{}-{}", env::consts::OS, env::consts::ARCH);
-
-        let cache_dir = if let Ok(dir) = env::var("CRASHPAD_CACHE_DIR") {
-            PathBuf::from(dir).join("bin").join(&platform_dir)
-        } else {
-            dirs::cache_dir()
-                .ok_or("Could not determine cache directory")?
-                .join("crashpad-cache")
-                .join("bin")
-                .join(&platform_dir)
-        };
+        // Use unified cache directory from cache module
+        let cache_dir = crate::cache::tools_dir();
 
         // Ensure cache directory exists
         fs::create_dir_all(&cache_dir)?;

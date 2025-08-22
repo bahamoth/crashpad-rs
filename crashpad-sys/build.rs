@@ -1,6 +1,8 @@
 /// Build script for the crashpad-sys crate.
 ///
 /// This script orchestrates the entire Crashpad build process.
+#[path = "build/cache.rs"]
+mod cache;
 #[path = "build/config.rs"]
 mod config;
 #[path = "build/depot_build.rs"]
