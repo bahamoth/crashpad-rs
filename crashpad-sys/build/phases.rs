@@ -1,18 +1,12 @@
+#![allow(dead_code)]
+
 use std::env;
-#[cfg(any(
-    windows,
-    feature = "vendored",
-    not(any(feature = "vendored", feature = "vendored-depot", feature = "prebuilt"))
-))]
+#[allow(unused_imports)]
 use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
 
 use crate::config::BuildConfig;
-#[cfg(any(
-    feature = "vendored",
-    not(any(feature = "vendored", feature = "vendored-depot", feature = "prebuilt"))
-))]
 use crate::tools::BinaryToolManager;
 
 pub struct BuildPhases {
@@ -34,32 +28,17 @@ impl BuildPhases {
     }
 
     /// Phase 1: Prepare dependencies (ensure build tools are available)
-    #[cfg(any(
-        feature = "vendored",
-        not(any(feature = "vendored", feature = "vendored-depot", feature = "prebuilt"))
-    ))]
     pub fn prepare(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         // Ensure crashpad directory exists and has required files
         if !self.config.crashpad_dir.exists() {
             return Err("Crashpad directory not found".into());
         }
 
-        // Use BinaryToolManager for GN/Ninja
-        // Set up GN and Ninja binaries
-
         let tool_manager = BinaryToolManager::new(self.config.verbose)?;
-
-        // Ensure GN and Ninja are available
         let gn_path = tool_manager.ensure_gn()?;
         let ninja_path = tool_manager.ensure_ninja()?;
-
-        // Store paths for later use
         self.gn_path = Some(gn_path.clone());
         self.ninja_path = Some(ninja_path.clone());
-
-        // Store paths for later build phases
-
-        // Windows: MSVC will be used (no Clang download needed)
 
         // Check if symlinks already exist (created by xtask symlink)
         let test_link = self
@@ -67,12 +46,7 @@ impl BuildPhases {
             .crashpad_dir
             .join("third_party/mini_chromium/mini_chromium");
 
-        if test_link.exists() {
-            // Symlinks already exist, skip creation
-            // Dependencies already linked
-        } else {
-            // Create symlinks/junctions for dependencies
-            // Create symlinks/junctions for dependencies
+        if !test_link.exists() {
             self.create_dependency_links()?;
         }
 
@@ -80,10 +54,6 @@ impl BuildPhases {
     }
 
     /// Phase 2: Configure build with GN
-    #[cfg(any(
-        feature = "vendored",
-        not(any(feature = "vendored", feature = "vendored-depot", feature = "prebuilt"))
-    ))]
     pub fn configure(&self) -> Result<(), Box<dyn std::error::Error>> {
         let build_dir = self.config.build_dir();
 
@@ -147,14 +117,8 @@ impl BuildPhases {
     }
 
     /// Phase 3: Build with Ninja
-    #[cfg(any(
-        feature = "vendored",
-        not(any(feature = "vendored", feature = "vendored-depot", feature = "prebuilt"))
-    ))]
     pub fn build(&self) -> Result<(), Box<dyn std::error::Error>> {
         let build_dir = self.config.build_dir();
-
-        // Building with Ninja
 
         // Get Ninja path (set in prepare phase)
         let ninja_cmd = self
@@ -236,8 +200,6 @@ impl BuildPhases {
 
         // Windows: Use cc crate for MSVC compilation
         if self.config.target.contains("windows") {
-            // Use cc crate for MSVC compilation on Windows
-
             let mut build = cc::Build::new();
             build
                 .cpp(true)
@@ -257,12 +219,9 @@ impl BuildPhases {
             // Match the runtime library with what GN is using
             // GN builds with /MDd in debug mode, /MD in release mode
             if self.config.profile == "debug" {
-                // Debug build - use dynamic debug CRT to match Crashpad
                 build.flag("/MDd");
-                // Also set iterator debug level to match
                 build.define("_ITERATOR_DEBUG_LEVEL", "2");
             } else {
-                // Release build - use dynamic release CRT
                 build.flag("/MD");
             }
 
@@ -566,10 +525,6 @@ impl BuildPhases {
     }
 
     /// Copy crashpad_handler to target directory for consistent access
-    #[cfg(any(
-        feature = "vendored",
-        not(any(feature = "vendored", feature = "vendored-depot", feature = "prebuilt"))
-    ))]
     fn copy_handler_to_target(&self) -> Result<(), Box<dyn std::error::Error>> {
         // iOS doesn't have external handler
         if self.config.target.contains("ios") {
@@ -634,8 +589,6 @@ impl BuildPhases {
         // Copy the handler
         fs::copy(&handler_src, &handler_dest)?;
 
-        // Handler copied to target directory for easy access
-
         // Set executable permissions on Unix
         #[cfg(unix)]
         {
@@ -655,10 +608,6 @@ impl BuildPhases {
     }
 
     /// Create symlinks/junctions for dependencies
-    #[cfg(any(
-        feature = "vendored",
-        not(any(feature = "vendored", feature = "vendored-depot", feature = "prebuilt"))
-    ))]
     fn create_dependency_links(&self) -> Result<(), Box<dyn std::error::Error>> {
         let deps = vec![
             ("mini_chromium", "mini_chromium"),
@@ -706,8 +655,6 @@ impl BuildPhases {
 
             #[cfg(windows)]
             {
-                // Windows: Always copy instead of symlink to avoid permission issues
-                // Copy directory for Windows (symlinks not supported)
                 Self::copy_directory(&target, &link)?;
             }
         }
@@ -717,10 +664,6 @@ impl BuildPhases {
 
     /// Copy directory recursively (Windows fallback for symlinks)
     #[cfg(windows)]
-    #[cfg(any(
-        feature = "vendored",
-        not(any(feature = "vendored", feature = "vendored-depot", feature = "prebuilt"))
-    ))]
     fn copy_directory(
         src: &std::path::Path,
         dst: &std::path::Path,
@@ -745,10 +688,6 @@ impl BuildPhases {
 
     /// Setup python3 alias for Windows
     #[cfg(windows)]
-    #[cfg(any(
-        feature = "vendored",
-        not(any(feature = "vendored", feature = "vendored-depot", feature = "prebuilt"))
-    ))]
     fn setup_python3_alias(&self) -> Result<(), Box<dyn std::error::Error>> {
         use std::process::Command;
 

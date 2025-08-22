@@ -5,9 +5,7 @@ use anyhow::Result;
 use clap::{Parser, Subcommand};
 use xshell::Shell;
 
-use commands::{
-    build, build_prebuilt, create_symlinks, dist, install_tools, test, update_deps,
-};
+use commands::{build, build_prebuilt, create_symlinks, dist, install_tools, test, update_deps};
 
 #[derive(Parser)]
 #[command(author, version, about = "Development tasks for crashpad-rs")]
@@ -26,7 +24,7 @@ enum Commands {
     },
     /// Package the crates for distribution
     Dist,
-    /// Run tests
+    /// Run tests in parallel using multiple processes
     Test,
     /// Install external development tools
     InstallTools,
@@ -47,7 +45,15 @@ enum Commands {
 }
 
 fn main() -> Result<()> {
-    let cli = Cli::parse();
+    // Parse CLI args, but handle the case where no command is provided
+    let cli = match Cli::try_parse() {
+        Ok(cli) => cli,
+        Err(e) => {
+            eprintln!("{e}");
+            std::process::exit(0);
+        }
+    };
+
     let sh = Shell::new()?;
 
     match cli.command {

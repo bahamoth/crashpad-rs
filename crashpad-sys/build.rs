@@ -1,15 +1,14 @@
 /// Build script for the crashpad-sys crate.
 ///
 /// This script orchestrates the entire Crashpad build process.
+// All build modules are compiled regardless of features to support `cargo check`.
+// The #[allow(dead_code)] attributes suppress warnings for unused code when
+// specific features don't use all functions.
 #[path = "build/cache.rs"]
 mod cache;
 #[path = "build/config.rs"]
 mod config;
 #[path = "build/depot_build.rs"]
-#[cfg(any(
-    feature = "vendored-depot",
-    not(any(feature = "vendored", feature = "vendored-depot", feature = "prebuilt"))
-))]
 mod depot_build;
 #[path = "build/phases.rs"]
 mod phases;
@@ -19,15 +18,9 @@ mod prebuilt;
 #[path = "build/tools.rs"]
 mod tools;
 
-#[cfg(any(
-    feature = "vendored",
-    not(any(feature = "vendored", feature = "vendored-depot", feature = "prebuilt"))
-))]
+#[allow(unused_imports)]
 use config::BuildConfig;
-#[cfg(any(
-    feature = "vendored",
-    not(any(feature = "vendored", feature = "vendored-depot", feature = "prebuilt"))
-))]
+#[allow(unused_imports)]
 use phases::BuildPhases;
 
 fn main() {
@@ -100,7 +93,6 @@ fn main() {
             eprintln!("Prebuilt download failed: {e}");
             std::process::exit(1);
         }
-        return;
     }
 
     #[cfg(all(not(feature = "prebuilt"), feature = "vendored-depot"))]

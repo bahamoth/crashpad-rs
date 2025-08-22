@@ -2,20 +2,20 @@ use anyhow::Result;
 use xshell::Shell;
 
 #[cfg(unix)]
-use std::path::PathBuf;
-#[cfg(unix)]
 use crate::utils::find_workspace_root;
+#[cfg(unix)]
+use std::path::PathBuf;
 
-pub fn create_symlinks(#[cfg(unix)] sh: &Shell, #[cfg(windows)] _sh: &Shell) -> Result<()> {
+pub fn create_symlinks(#[cfg_attr(windows, allow(unused_variables))] sh: &Shell) -> Result<()> {
     println!("🔗 Preparing for packaging...");
-    
+
     // With vendored-depot, dependencies are handled automatically during build
     // This function is kept for backward compatibility with cargo package workflow
-    
+
     #[cfg(unix)]
     {
         println!("Creating symlinks for Crashpad dependencies...");
-        
+
         let deps = vec![
             ("mini_chromium", "mini_chromium"),
             ("googletest", "googletest"),
@@ -86,10 +86,10 @@ pub fn create_symlinks(#[cfg(unix)] sh: &Shell, #[cfg(windows)] _sh: &Shell) -> 
             symlink(&rel_path, &link)?;
             println!("  ✓ Linked {} -> {}", dep_name, rel_path.display());
         }
-        
+
         println!("✅ Symlinks created successfully");
     }
-    
+
     #[cfg(windows)]
     {
         println!("ℹ️  Windows: Using vendored-depot for dependency management");

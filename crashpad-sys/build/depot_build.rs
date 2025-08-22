@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 /// Build Crashpad using depot_tools
 ///
 /// Uses official Crashpad build process for all platforms including Windows
@@ -10,13 +12,11 @@ use crate::tools::{depot_cmd, ensure_depot_tools, setup_depot_tools_env};
 
 /// Main entry point for build.rs
 pub fn build_with_depot_tools() -> Result<(), Box<dyn std::error::Error>> {
-    let out_dir = PathBuf::from(env::var("OUT_DIR")?);
     let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR")?);
     let target = env::var("TARGET")?;
     let profile = env::var("PROFILE").unwrap_or_else(|_| "debug".to_string());
 
-    // Step 1: Setup depot_tools (reusable)
-    // Use platform-specific shared location for depot_tools
+    // Step 1: Setup depot_tools
     let platform_dir = manifest_dir
         .parent()
         .expect("Failed to get parent directory")
@@ -25,8 +25,9 @@ pub fn build_with_depot_tools() -> Result<(), Box<dyn std::error::Error>> {
     let depot_tools_dir = ensure_depot_tools(&platform_dir)?;
     setup_depot_tools_env(&depot_tools_dir)?;
 
-    // Step 2: Build Crashpad with depot_tools (reusable for xtask)
-    let build_dir = out_dir.join("depot_build");
+    // Step 2: Build Crashpad with depot_tools
+    // Use a permanent location for crashpad source, not a temp directory
+    let build_dir = platform_dir.join("crashpad_source");
     let build_output = build_crashpad_with_depot(
         &depot_tools_dir,
         &build_dir,
@@ -35,7 +36,7 @@ pub fn build_with_depot_tools() -> Result<(), Box<dyn std::error::Error>> {
         &profile,
     )?;
 
-    // Step 3: Build crashpad-rs-sys (wrapper, bindgen, link)
+    // Step 3: Build crashpad-rs-sys
     build_crashpad_sys(&build_output, &target)?;
 
     Ok(())
@@ -47,7 +48,7 @@ pub struct CrashpadBuildOutput {
     pub build_out_dir: PathBuf,
 }
 
-/// Build Crashpad using depot_tools (reusable for xtask)
+/// Build Crashpad using depot_tools
 pub fn build_crashpad_with_depot(
     depot_tools_dir: &Path,
     build_dir: &Path,
@@ -55,14 +56,36 @@ pub fn build_crashpad_with_depot(
     target: &str,
     profile: &str,
 ) -> Result<CrashpadBuildOutput, Box<dyn std::error::Error>> {
-    // Clean and create work directory
-    if build_dir.exists() {
-        fs::remove_dir_all(&build_dir)?;
-    }
-    fs::create_dir_all(&build_dir)?;
+    // Configure output directory to be in target/{target}/{profile}/crashpad_build
+    let final_build_dir = manifest_dir
+        .parent()
+        .expect("Failed to get parent directory")
+        .join("target")
+        .join(target)
+        .join(profile)
+        .join("crashpad_build");
 
-    // Create .gclient file
-    let gclient_content = r#"solutions = [
+    // Check for build completion marker
+    let marker_file = final_build_dir.join(".crashpad-ok");
+    if marker_file.exists() {
+        println!("cargo:warning=Using cached Crashpad build (.crashpad-ok found)");
+        println!(
+            "cargo:warning=Note: If crashpad_wrapper.cc was modified, delete {} and rebuild",
+            marker_file.display()
+        );
+
+        // For cached builds, crashpad source should be at permanent location
+        let crashpad_dir = build_dir.join("crashpad");
+
+        // If source doesn't exist, we need to sync it
+        if !crashpad_dir.exists() {
+            // Silently sync source if needed
+
+            // Create work directory
+            fs::create_dir_all(build_dir)?;
+
+            // Create .gclient file
+            let gclient_content = r#"solutions = [
   {
     "name": "crashpad",
     "url": "https://chromium.googlesource.com/crashpad/crashpad.git",
@@ -71,23 +94,72 @@ pub fn build_crashpad_with_depot(
     "custom_vars": {},
   },
 ]"#;
-    fs::write(build_dir.join(".gclient"), gclient_content)?;
+            fs::write(build_dir.join(".gclient"), gclient_content)?;
 
-    // Run gclient sync
-    let gclient = depot_cmd(depot_tools_dir, "gclient");
-    let status = Command::new(&gclient)
-        .args(&["sync", "--no-history"])
-        .current_dir(&build_dir)
-        .env("DEPOT_TOOLS_WIN_TOOLCHAIN", "0")
-        .status()?;
+            // Run gclient sync to get source
+            let gclient = depot_cmd(depot_tools_dir, "gclient");
+            let status = Command::new(&gclient)
+                .args(["sync", "--no-history"])
+                .current_dir(build_dir)
+                .env("DEPOT_TOOLS_WIN_TOOLCHAIN", "0")
+                .status()?;
 
-    if !status.success() {
-        return Err("gclient sync failed".into());
+            if !status.success() {
+                return Err("gclient sync failed".into());
+            }
+
+            // Copy crashpad_wrapper.cc
+            fs::copy(
+                manifest_dir.join("crashpad_wrapper.cc"),
+                crashpad_dir.join("crashpad_wrapper.cc"),
+            )?;
+        }
+
+        return Ok(CrashpadBuildOutput {
+            build_out_dir: final_build_dir,
+            crashpad_dir,
+        });
+    }
+
+    // Don't clean if .gclient already exists (source is already there)
+    if !build_dir.join(".gclient").exists() {
+        // Clean and create work directory only if no existing source
+        if build_dir.exists() {
+            fs::remove_dir_all(build_dir)?;
+        }
+        fs::create_dir_all(build_dir)?;
+    }
+
+    // Only create .gclient and sync if not already done
+    if !build_dir.join(".gclient").exists() {
+        // Create .gclient file
+        let gclient_content = r#"solutions = [
+  {
+    "name": "crashpad",
+    "url": "https://chromium.googlesource.com/crashpad/crashpad.git",
+    "managed": True,
+    "custom_deps": {},
+    "custom_vars": {},
+  },
+]"#;
+        fs::write(build_dir.join(".gclient"), gclient_content)?;
+
+        // Run gclient sync
+        let gclient = depot_cmd(depot_tools_dir, "gclient");
+        let status = Command::new(&gclient)
+            .args(["sync", "--no-history"])
+            .current_dir(build_dir)
+            .env("DEPOT_TOOLS_WIN_TOOLCHAIN", "0")
+            .status()?;
+
+        if !status.success() {
+            return Err("gclient sync failed".into());
+        }
     }
 
     let crashpad_dir = build_dir.join("crashpad");
 
-    // Copy crashpad_wrapper.cc
+    // Copy crashpad_wrapper.cc (always copy to ensure it's up to date)
     fs::copy(
         manifest_dir.join("crashpad_wrapper.cc"),
         crashpad_dir.join("crashpad_wrapper.cc"),
@@ -118,22 +190,13 @@ pub fn build_crashpad_with_depot(
         ));
     }
 
-    // Configure output directory to be in target/{target}/{profile}/crashpad_build
-    let final_build_dir = manifest_dir
-        .parent()
-        .expect("Failed to get parent directory")
-        .join("target")
-        .join(&target)
-        .join(&profile)
-        .join("crashpad_build");
-
     // Create the output directory if it doesn't exist
     fs::create_dir_all(&final_build_dir)?;
 
     // Run GN gen with absolute output path
     let gn = depot_cmd(depot_tools_dir, "gn");
     let status = Command::new(&gn)
-        .args(&[
+        .args([
             "gen",
             final_build_dir.to_str().unwrap(),
             &format!("--args={}", gn_args.join(" ")),
@@ -148,7 +211,7 @@ pub fn build_crashpad_with_depot(
     // Run Ninja build - explicitly build library targets
     let ninja = depot_cmd(depot_tools_dir, "ninja");
     let status = Command::new(&ninja)
-        .args(&[
+        .args([
             "-C",
             final_build_dir.to_str().unwrap(),
             "client:client",
@@ -163,6 +226,10 @@ pub fn build_crashpad_with_depot(
     if !status.success() {
         return Err("ninja build failed".into());
     }
+
+    // Create build completion marker
+    let marker_file = final_build_dir.join(".crashpad-ok");
+    fs::write(&marker_file, "")?;
 
     Ok(CrashpadBuildOutput {
         build_out_dir: final_build_dir,
