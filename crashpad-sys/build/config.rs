@@ -365,6 +365,16 @@ impl BuildConfig {
         self.gn_args
             .insert("target_cpu".to_string(), format!("\"{arch}\""));
 
+        // Set compiler
+        self.compiler = PathBuf::from("clang++");
+
+        // Add target triple for cross-compilation
+        let host = env::var("HOST").unwrap_or_default();
+        if !host.is_empty() && host != target {
+            // Cross-compiling: add target triple
+            self.cxx_flags.push(format!("--target={}", target));
+        }
+
         // Add PIC flag for Linux
         self.cxx_flags.push("-fPIC".to_string());
     }

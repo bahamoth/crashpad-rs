@@ -84,68 +84,155 @@ pub fn build_prebuilt(sh: &Shell, target: Option<String>) -> Result<()> {
         println!("  ✓ bindings.rs");
     }
 
-    // 2. Copy crashpad_wrapper.lib
-    let wrapper_lib_src = artifacts.out_dir.join("crashpad_wrapper.lib");
-    if wrapper_lib_src.exists() {
-        let wrapper_lib_dest = prebuilt_dir.join("crashpad_wrapper.lib");
-        fs::copy(&wrapper_lib_src, &wrapper_lib_dest)?;
-        println!("  ✓ crashpad_wrapper.lib");
-    }
+    // 2. Copy platform-specific libraries and handler
+    match target.as_str() {
+        t if t.contains("windows") => {
+            // Copy crashpad_wrapper.lib
+            let wrapper_lib_src = artifacts.out_dir.join("crashpad_wrapper.lib");
+            if wrapper_lib_src.exists() {
+                let wrapper_lib_dest = prebuilt_dir.join("crashpad_wrapper.lib");
+                fs::copy(&wrapper_lib_src, &wrapper_lib_dest)?;
+                println!("  ✓ crashpad_wrapper.lib");
+            }
 
-    if target.contains("windows") {
-        // 3. Copy all .lib files from crashpad_build/obj/
-        let crashpad_build_dir =
-            workspace_root.join(format!("target/{}/release/crashpad_build", target));
+            // Copy all .lib files from crashpad_build/obj/
+            let crashpad_build_dir =
+                workspace_root.join(format!("target/{}/release/crashpad_build", target));
 
-        if crashpad_build_dir.exists() {
-            // Create lib directory for organization
-            let lib_dir = prebuilt_dir.join("lib");
-            sh.create_dir(&lib_dir)?;
+            if crashpad_build_dir.exists() {
+                // Create lib directory for organization
+                let lib_dir = prebuilt_dir.join("lib");
+                sh.create_dir(&lib_dir)?;
 
-            // List of required .lib files with their paths
-            let lib_files = vec![
-                ("obj/client/client.lib", "client.lib"),
-                ("obj/client/common.lib", "common.lib"),
-                ("obj/util/util.lib", "util.lib"),
+                // List of required .lib files with their paths
+                let lib_files = vec![
+                    ("obj/client/client.lib", "client.lib"),
+                    ("obj/client/common.lib", "common.lib"),
+                    ("obj/util/util.lib", "util.lib"),
+                    (
+                        "obj/third_party/mini_chromium/mini_chromium/base/base.lib",
+                        "base.lib",
+                    ),
+                    ("obj/third_party/zlib/zlib.lib", "zlib.lib"),
+                    ("obj/snapshot/context.lib", "context.lib"),
+                    ("obj/snapshot/snapshot.lib", "snapshot.lib"),
+                    ("obj/minidump/format.lib", "format.lib"),
+                    ("obj/minidump/minidump.lib", "minidump.lib"),
+                    ("obj/handler/handler.lib", "handler.lib"),
+                    ("obj/handler/common.lib", "handler_common.lib"),
+                    ("obj/compat/compat.lib", "compat.lib"),
+                    ("obj/util/net.lib", "net.lib"),
+                    ("obj/third_party/getopt/getopt.lib", "getopt.lib"),
+                ];
+
+                for (src_path, dest_name) in lib_files {
+                    let src = crashpad_build_dir.join(src_path);
+                    if src.exists() {
+                        let dest = lib_dir.join(dest_name);
+                        fs::copy(&src, &dest)?;
+                        println!("  ✓ {}", dest_name);
+                    } else {
+                        println!("  ⚠ Missing: {}", src_path);
+                    }
+                }
+            }
+
+            // Copy crashpad_handler.exe
+            let handler_src = crashpad_build_dir.join("crashpad_handler.exe");
+            if handler_src.exists() {
+                let handler_dest = prebuilt_dir.join("crashpad_handler.exe");
+                fs::copy(&handler_src, &handler_dest)?;
+                println!("  ✓ crashpad_handler.exe");
+            } else {
+                println!(
+                    "  ⚠ crashpad_handler.exe not found at {}",
+                    handler_src.display()
+                );
+            }
+        }
+        t if t.contains("apple") || t.contains("linux") || t.contains("android") => {
+            // Copy wrapper library
+            let wrapper_src = artifacts.out_dir.join("libcrashpad_wrapper.a");
+            if wrapper_src.exists() {
+                let wrapper_dest = prebuilt_dir.join("libcrashpad_wrapper.a");
+                fs::copy(&wrapper_src, &wrapper_dest)?;
+                println!("  ✓ libcrashpad_wrapper.a");
+            }
+
+            // Copy actual crashpad libraries from build/obj
+            let crashpad_build_dir = workspace_root
+                .join("target")
+                .join(&target)
+                .join("release")
+                .join("crashpad_build")
+                .join("obj");
+
+            // Define libraries to copy with their paths
+            let mut lib_files = vec![
+                ("client/libclient.a", "libclient.a"),
+                ("client/libcommon.a", "libcommon.a"),
+                ("util/libutil.a", "libutil.a"),
                 (
-                    "obj/third_party/mini_chromium/mini_chromium/base/base.lib",
-                    "base.lib",
+                    "third_party/mini_chromium/mini_chromium/base/libbase.a",
+                    "libbase.a",
                 ),
-                ("obj/third_party/zlib/zlib.lib", "zlib.lib"),
-                ("obj/snapshot/context.lib", "context.lib"),
-                ("obj/snapshot/snapshot.lib", "snapshot.lib"),
-                ("obj/minidump/format.lib", "format.lib"),
-                ("obj/minidump/minidump.lib", "minidump.lib"),
-                ("obj/handler/handler.lib", "handler.lib"),
-                ("obj/handler/common.lib", "handler_common.lib"),
-                ("obj/compat/compat.lib", "compat.lib"),
-                ("obj/util/net.lib", "net.lib"),
-                ("obj/third_party/getopt/getopt.lib", "getopt.lib"),
+                ("minidump/libformat.a", "libformat.a"),
             ];
 
+            // Add platform-specific libraries
+            if t.contains("apple") {
+                lib_files.push(("util/libmig_output.a", "libmig_output.a"));
+            }
+
             for (src_path, dest_name) in lib_files {
-                let src = crashpad_build_dir.join(src_path);
-                if src.exists() {
-                    let dest = lib_dir.join(dest_name);
-                    fs::copy(&src, &dest)?;
+                let lib_src = crashpad_build_dir.join(src_path);
+                if lib_src.exists() {
+                    let lib_dest = prebuilt_dir.join(dest_name);
+                    fs::copy(&lib_src, &lib_dest)?;
                     println!("  ✓ {}", dest_name);
                 } else {
-                    println!("  ⚠ Missing: {}", src_path);
+                    println!("  ⚠ Missing: {} at {}", dest_name, lib_src.display());
+                }
+            }
+
+            // Copy crashpad_handler for non-iOS platforms
+            if !t.contains("ios") {
+                let handler_name = if t.contains("android") {
+                    "libcrashpad_handler.so"
+                } else {
+                    "crashpad_handler"
+                };
+
+                let handler_src = workspace_root
+                    .join("target")
+                    .join(&target)
+                    .join("release")
+                    .join(handler_name);
+
+                if handler_src.exists() {
+                    let handler_dest = prebuilt_dir.join(handler_name);
+                    fs::copy(&handler_src, &handler_dest)?;
+
+                    // Set executable permissions on Unix
+                    #[cfg(unix)]
+                    {
+                        use std::os::unix::fs::PermissionsExt;
+                        let mut perms = fs::metadata(&handler_dest)?.permissions();
+                        perms.set_mode(0o755);
+                        fs::set_permissions(&handler_dest, perms)?;
+                    }
+                    println!("  ✓ {}", handler_name);
+                } else {
+                    println!(
+                        "  ⚠ {} not found at {}",
+                        handler_name,
+                        handler_src.display()
+                    );
                 }
             }
         }
-
-        // 4. Copy crashpad_handler.exe
-        let handler_src = crashpad_build_dir.join("crashpad_handler.exe");
-        if handler_src.exists() {
-            let handler_dest = prebuilt_dir.join("crashpad_handler.exe");
-            fs::copy(&handler_src, &handler_dest)?;
-            println!("  ✓ crashpad_handler.exe");
-        } else {
-            println!(
-                "  ⚠ crashpad_handler.exe not found at {}",
-                handler_src.display()
-            );
+        _ => {
+            println!("  ⚠ Unknown platform: {}", target);
         }
     }
 

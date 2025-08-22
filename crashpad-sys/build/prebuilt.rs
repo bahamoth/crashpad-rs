@@ -12,18 +12,37 @@ pub fn download_and_link() -> Result<(), Box<dyn std::error::Error>> {
     let target = env::var("TARGET")?;
     let version = env::var("CARGO_PKG_VERSION")?;
 
-    eprintln!("Using prebuilt binaries for {} v{}", target, version);
+    println!(
+        "cargo:warning=Using prebuilt binaries for {} v{}",
+        target, version
+    );
 
     // 캐시 디렉토리
     let cache_dir = crate::cache::prebuilt_dir(&version, &target);
+    println!("cargo:warning=Cache dir: {}", cache_dir.display());
 
     let marker_file = cache_dir.join(".crashpad-ok");
     if !marker_file.exists() {
+        println!("cargo:warning=No marker file, attempting download...");
         download_prebuilt(&version, &target, &cache_dir)?;
         fs::write(&marker_file, "")?;
     }
 
-    eprintln!("Using cached prebuilt from: {}", cache_dir.display());
+    println!(
+        "cargo:warning=Using cached prebuilt from: {}",
+        cache_dir.display()
+    );
+
+    // Debug: List files in cache directory
+    if cache_dir.exists() {
+        println!("cargo:warning=Cache directory contents:");
+        for entry in fs::read_dir(&cache_dir)? {
+            let entry = entry?;
+            println!("cargo:warning=  - {}", entry.file_name().to_string_lossy());
+        }
+    } else {
+        println!("cargo:warning=Cache directory does not exist!");
+    }
 
     // Copy bindings.rs from cache
     let bindings_src = cache_dir.join("bindings.rs");
@@ -55,16 +74,21 @@ fn download_prebuilt(
 
     // GitHub Release URL 구성
     let url = format!(
-        "https://github.com/kyunghoon/crashpad-rs/releases/download/v{}/crashpad-{}-{}.tar.gz",
+        "https://github.com/bahamoth/crashpad-rs/releases/download/v{}/crashpad-{}-{}.tar.gz",
         version, version, target
     );
 
-    eprintln!("Downloading from: {}", url);
+    println!("cargo:warning=Downloading from: {}", url);
 
     // 다운로드
-    let response = ureq::get(&url)
-        .call()
-        .map_err(|e| format!("Failed to download prebuilt: {}", e))?;
+    let response = ureq::get(&url).call().map_err(|e| {
+        println!(
+            "cargo:warning=Note: Prebuilt binaries not available at {}",
+            url
+        );
+        println!("cargo:warning=This is expected if releases haven't been published yet");
+        format!("Failed to download prebuilt: {}", e)
+    })?;
 
     // 임시 파일에 저장
     let temp_file = cache_dir.join("download.tar.gz");
@@ -156,8 +180,23 @@ fn setup_link_flags(cache_dir: &Path, target: &str) -> Result<(), Box<dyn std::e
         println!("cargo:rustc-link-lib=static=net");
         println!("cargo:rustc-link-lib=static=getopt");
         println!("cargo:rustc-link-lib=static=zlib");
+    } else if target.contains("apple") {
+        // macOS and iOS need wrapper plus actual libraries
+        println!("cargo:rustc-link-lib=static=crashpad_wrapper");
+        println!("cargo:rustc-link-lib=static=client");
+        println!("cargo:rustc-link-lib=static=common");
+        println!("cargo:rustc-link-lib=static=util");
+        println!("cargo:rustc-link-lib=static=format");
+        println!("cargo:rustc-link-lib=static=base");
+        println!("cargo:rustc-link-lib=static=mig_output");
     } else {
-        println!("cargo:rustc-link-lib=static=crashpad");
+        // Linux/Android
+        println!("cargo:rustc-link-lib=static=crashpad_wrapper");
+        println!("cargo:rustc-link-lib=static=client");
+        println!("cargo:rustc-link-lib=static=common");
+        println!("cargo:rustc-link-lib=static=util");
+        println!("cargo:rustc-link-lib=static=format");
+        println!("cargo:rustc-link-lib=static=base");
     }
 
     // Platform-specific libraries
@@ -166,11 +205,20 @@ fn setup_link_flags(cache_dir: &Path, target: &str) -> Result<(), Box<dyn std::e
         println!("cargo:rustc-link-lib=kernel32");
         println!("cargo:rustc-link-lib=user32");
         println!("cargo:rustc-link-lib=winmm");
-    } else if target.contains("apple") {
+    } else if target.contains("apple-ios") {
+        println!("cargo:rustc-link-lib=framework=Foundation");
+        println!("cargo:rustc-link-lib=framework=Security");
+        println!("cargo:rustc-link-lib=framework=CoreFoundation");
+        println!("cargo:rustc-link-lib=framework=UIKit");
+        println!("cargo:rustc-link-lib=c++");
+        println!("cargo:rustc-link-lib=z");
+    } else if target.contains("apple-darwin") {
         println!("cargo:rustc-link-lib=framework=Foundation");
         println!("cargo:rustc-link-lib=framework=Security");
         println!("cargo:rustc-link-lib=framework=CoreFoundation");
         println!("cargo:rustc-link-lib=framework=IOKit");
+        println!("cargo:rustc-link-lib=dylib=bsm");
+        println!("cargo:rustc-link-lib=c++");
     } else {
         println!("cargo:rustc-link-lib=stdc++");
         println!("cargo:rustc-link-lib=pthread");

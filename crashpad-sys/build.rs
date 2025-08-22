@@ -1,11 +1,9 @@
 /// Build script for the crashpad-sys crate.
 ///
 /// This script orchestrates the entire Crashpad build process.
-
 // All build modules are compiled regardless of features to support `cargo check`.
 // The #[allow(dead_code)] attributes suppress warnings for unused code when
 // specific features don't use all functions.
-
 #[path = "build/cache.rs"]
 mod cache;
 #[path = "build/config.rs"]

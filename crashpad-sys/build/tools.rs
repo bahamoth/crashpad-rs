@@ -6,7 +6,6 @@
 /// This module handles two strategies:
 /// 1. Standalone tools (GN/Ninja) - for vendored builds
 /// 2. depot_tools - for vendored-depot builds (required on Windows)
-
 use std::env;
 use std::fs;
 use std::io::{self, Read};

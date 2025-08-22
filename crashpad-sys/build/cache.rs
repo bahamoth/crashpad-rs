@@ -3,7 +3,6 @@
 /// Unified cache directory management for crashpad-rs
 ///
 /// Simple module to provide consistent cache paths across all build methods
-
 use std::env;
 use std::path::PathBuf;
 

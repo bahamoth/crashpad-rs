@@ -3,7 +3,6 @@
 /// Build Crashpad using depot_tools
 ///
 /// Uses official Crashpad build process for all platforms including Windows
-
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
