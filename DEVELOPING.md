@@ -24,6 +24,9 @@ contributing.
     - macOS: Xcode Command Line Tools (`xcode-select --install`)
     - Linux: GCC or Clang (`apt install build-essential`)
     - Windows: Visual Studio 2019+ or MinGW
+- **just**: Cross-platform command runner (replaces make)
+    - Install: `cargo install just` or see [installation options](https://github.com/casey/just#installation)
+    - Or use: `cargo xtask install-tools` to install all development tools
 
 > **Note**: Python and depot_tools are no longer required! Git submodules handle all dependencies.
 
@@ -163,11 +166,11 @@ cargo xtask dist
 
 ```bash
 # Clean all build artifacts including native dependencies
-make clean
+just clean
 
 # Or manually:
-rm -rf target/ crashpad-sys/third_party/crashpad/out/
 cargo clean
+rm -rf target/ ~/.cache/crashpad-build-tools
 ```
 
 ### What's happening in the Build?
@@ -554,7 +557,7 @@ export ANDROID_NDK_ROOT=$ANDROID_NDK_HOME
 **Solution**:
 
 1. Initialize submodules: `git submodule update --init --recursive`
-2. Clean everything and rebuild: `make clean && cargo build`
+2. Clean everything and rebuild: `just clean && cargo build`
 3. Check that symlinks/junctions were created in `crashpad-sys/third_party/crashpad/third_party/`
 
 ### Test Failures

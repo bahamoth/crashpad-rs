@@ -1,0 +1,74 @@
+name: Test Prebuilt Build
+
+on:
+  workflow_dispatch:
+    inputs:
+      upload_to_release:
+        description: 'Upload to a test release?'
+        required: false
+        type: boolean
+        default: false
+      test_tag:
+        description: 'Test tag name (if uploading)'
+        required: false
+        default: 'test-prebuilt'
+
+jobs:
+  build-windows-prebuilt:
+    runs-on: windows-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+      
+      - name: Setup Rust cache
+        uses: Swatinem/rust-cache@v2
+      
+      - name: Setup Python (for depot_tools)
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      
+      - name: Build prebuilt package
+        run: cargo xtask build-prebuilt --target x86_64-pc-windows-msvc
+      
+      - name: List build artifacts
+        run: |
+          echo "Contents of target/prebuilt-archives:"
+          dir target\prebuilt-archives
+        shell: powershell
+      
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: windows-prebuilt
+          path: |
+            target/prebuilt-archives/*.tar.gz
+            target/prebuilt-archives/*.sha256
+          retention-days: 7
+      
+      - name: Create test release (optional)
+        if: ${{ inputs.upload_to_release }}
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ inputs.test_tag }}
+          name: "Test Prebuilt - ${{ inputs.test_tag }}"
+          body: |
+            Test prebuilt packages for Windows
+            
+            **This is a test release and should be deleted after verification**
+            
+            - Workflow run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+            - Commit: ${{ github.sha }}
+          files: |
+            target/prebuilt-archives/*.tar.gz
+            target/prebuilt-archives/*.sha256
+          fail_on_unmatched_files: true
+          prerelease: true

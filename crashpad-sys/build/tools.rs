@@ -1,12 +1,99 @@
-/// Binary tool management for GN and Ninja
+#![allow(dead_code)]
+#![allow(unused_imports)]
+
+/// Build tool management for Crashpad compilation
 ///
-/// This module handles downloading and caching of GN and Ninja binaries,
-/// eliminating the need for depot_tools and Python dependencies.
+/// This module handles two strategies:
+/// 1. Standalone tools (GN/Ninja) - for vendored builds
+/// 2. depot_tools - for vendored-depot builds (required on Windows)
 use std::env;
 use std::fs;
 use std::io::{self, Read};
 use std::path::{Path, PathBuf};
 use std::process::Command;
+
+/// Get depot_tools command path with correct extension
+pub fn depot_cmd(depot_tools_dir: &Path, cmd: &str) -> PathBuf {
+    if cfg!(windows) {
+        depot_tools_dir.join(format!("{}.bat", cmd))
+    } else {
+        depot_tools_dir.join(cmd)
+    }
+}
+
+/// Download and initialize depot_tools (reusable)
+pub fn ensure_depot_tools(platform_dir: &Path) -> Result<PathBuf, Box<dyn std::error::Error>> {
+    let depot_tools_dir = platform_dir.join("depot_tools");
+
+    // Check if depot_tools is already properly initialized
+    let python_marker = depot_tools_dir.join("python3_bin_reldir.txt");
+    let vpython3 = depot_cmd(&depot_tools_dir, "vpython3");
+
+    // If properly initialized, we can skip setup
+    if python_marker.exists() && vpython3.exists() {
+        return Ok(depot_tools_dir);
+    }
+
+    // Git clone
+    Command::new("git")
+        .args([
+            "clone",
+            "--depth",
+            "1",
+            "https://chromium.googlesource.com/chromium/tools/depot_tools.git",
+            depot_tools_dir.to_str().unwrap(),
+        ])
+        .status()?;
+
+    // Initialize depot_tools on all platforms
+    let update_script = depot_cmd(&depot_tools_dir, "update_depot_tools");
+
+    let status = if cfg!(windows) {
+        Command::new("cmd")
+            .args(["/C", update_script.to_str().unwrap()])
+            .current_dir(&depot_tools_dir)
+            .status()?
+    } else {
+        Command::new(&update_script)
+            .current_dir(&depot_tools_dir)
+            .status()?
+    };
+
+    if !status.success() {
+        return Err("Failed to update depot_tools".into());
+    }
+
+    // Run gclient to initialize Python environment
+    let gclient = depot_cmd(&depot_tools_dir, "gclient");
+    Command::new(&gclient)
+        .arg("--version")
+        .current_dir(&depot_tools_dir)
+        .status()?;
+
+    // Create python3_bin_reldir.txt if it doesn't exist (Windows specific)
+    #[cfg(windows)]
+    {
+        let python_file = depot_tools_dir.join("python3_bin_reldir.txt");
+        if !python_file.exists() {
+            fs::write(&python_file, "vpython3.bat")?;
+        }
+    }
+
+    Ok(depot_tools_dir)
+}
+
+/// Setup depot_tools environment variables
+pub fn setup_depot_tools_env(depot_tools_dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
+    let path = env::var("PATH").unwrap_or_default();
+    let path_sep = if cfg!(windows) { ";" } else { ":" };
+    env::set_var(
+        "PATH",
+        format!("{}{}{}", depot_tools_dir.display(), path_sep, path),
+    );
+    env::set_var("DEPOT_TOOLS_METRICS", "0");
+    env::set_var("DEPOT_TOOLS_WIN_TOOLCHAIN", "0");
+    Ok(())
+}
 
 /// Tool versions from Crashpad's DEPS file
 ///
@@ -16,6 +103,7 @@ use std::process::Command;
 /// 3. Copy the git_revision value for GN
 /// 4. Search for 'ninja' in the deps section  
 /// 5. Copy the version string for Ninja
+/// 6. For Clang, look for 'windows/clang' and copy the object_name
 ///
 /// Example from DEPS:
 /// ```
@@ -98,18 +186,8 @@ impl BinaryToolManager {
     pub fn new(verbose: bool) -> Result<Self, Box<dyn std::error::Error>> {
         let platform = Platform::detect()?;
 
-        // Platform-specific cache directory
-        let platform_dir = format!("{}-{}", env::consts::OS, env::consts::ARCH);
-
-        let cache_dir = if let Ok(dir) = env::var("CRASHPAD_CACHE_DIR") {
-            PathBuf::from(dir).join("bin").join(&platform_dir)
-        } else {
-            dirs::cache_dir()
-                .ok_or("Could not determine cache directory")?
-                .join("crashpad-cache")
-                .join("bin")
-                .join(&platform_dir)
-        };
+        // Use unified cache directory from cache module
+        let cache_dir = crate::cache::tools_dir();
 
         // Ensure cache directory exists
         fs::create_dir_all(&cache_dir)?;
@@ -196,7 +274,6 @@ impl BinaryToolManager {
         let mut archive = zip::ZipArchive::new(file)?;
 
         // Try to find and extract 'gn' binary
-        let gn_name = format!("gn{}", self.platform.executable_suffix());
         let mut found = false;
 
         for i in 0..archive.len() {
@@ -209,8 +286,7 @@ impl BinaryToolManager {
                 || name.ends_with("/gn")
                 || name.ends_with("/gn.exe")
             {
-                let outpath = self.cache_dir.join(&gn_name);
-                let mut outfile = fs::File::create(&outpath)?;
+                let mut outfile = fs::File::create(target_path)?;
                 io::copy(&mut file, &mut outfile)?;
                 found = true;
                 break;
@@ -218,21 +294,7 @@ impl BinaryToolManager {
         }
 
         if !found {
-            // If specific file not found, extract all and hope for the best
-            for i in 0..archive.len() {
-                let mut file = archive.by_index(i)?;
-                let outpath = self.cache_dir.join(file.name());
-
-                if file.name().ends_with('/') {
-                    fs::create_dir_all(&outpath)?;
-                } else {
-                    if let Some(parent) = outpath.parent() {
-                        fs::create_dir_all(parent)?;
-                    }
-                    let mut outfile = fs::File::create(&outpath)?;
-                    io::copy(&mut file, &mut outfile)?;
-                }
-            }
+            return Err("GN binary not found in archive".into());
         }
 
         // Clean up temp file
@@ -275,17 +337,22 @@ impl BinaryToolManager {
         let mut archive = zip::ZipArchive::new(file)?;
 
         // Extract all files (ninja releases are simple: just ninja binary + README)
+        let mut extracted = false;
         for i in 0..archive.len() {
             let mut file = archive.by_index(i)?;
             let name = file.name();
 
             // Look for ninja binary
             if name == "ninja" || name == "ninja.exe" {
-                let ninja_name = format!("ninja{}", self.platform.executable_suffix());
-                let outpath = self.cache_dir.join(&ninja_name);
-                let mut outfile = fs::File::create(&outpath)?;
+                let mut outfile = fs::File::create(target_path)?;
                 io::copy(&mut file, &mut outfile)?;
+                extracted = true;
+                break;
             }
+        }
+
+        if !extracted {
+            return Err("Ninja binary not found in archive".into());
         }
 
         // Clean up temp file

@@ -1,17 +1,45 @@
 /// Build script for the crashpad-sys crate.
 ///
 /// This script orchestrates the entire Crashpad build process.
+// All build modules are compiled regardless of features to support `cargo check`.
+// The #[allow(dead_code)] attributes suppress warnings for unused code when
+// specific features don't use all functions.
+#[path = "build/cache.rs"]
+mod cache;
 #[path = "build/config.rs"]
 mod config;
+#[path = "build/depot_build.rs"]
+mod depot_build;
 #[path = "build/phases.rs"]
 mod phases;
+#[path = "build/prebuilt.rs"]
+#[cfg(feature = "prebuilt")]
+mod prebuilt;
 #[path = "build/tools.rs"]
 mod tools;
 
+#[allow(unused_imports)]
 use config::BuildConfig;
+#[allow(unused_imports)]
 use phases::BuildPhases;
 
 fn main() {
+    // Feature flag validation - ensure only one build strategy is selected
+    #[cfg(all(feature = "vendored", feature = "vendored-depot"))]
+    compile_error!(
+        "Only one build strategy can be selected: vendored, vendored-depot, or prebuilt"
+    );
+
+    #[cfg(all(feature = "vendored", feature = "prebuilt"))]
+    compile_error!(
+        "Only one build strategy can be selected: vendored, vendored-depot, or prebuilt"
+    );
+
+    #[cfg(all(feature = "vendored-depot", feature = "prebuilt"))]
+    compile_error!(
+        "Only one build strategy can be selected: vendored, vendored-depot, or prebuilt"
+    );
+
     // Check if we're building on docs.rs
     if std::env::var("DOCS_RS").is_ok() {
         println!("cargo:warning=docs.rs build detected, skipping native build");
@@ -57,12 +85,79 @@ fn main() {
         return;
     }
 
-    if let Err(e) = run() {
-        eprintln!("Build failed: {e}");
-        std::process::exit(1);
+    // Dispatch based on build strategy
+    #[cfg(feature = "prebuilt")]
+    {
+        println!("cargo:warning=Using prebuilt strategy");
+        if let Err(e) = prebuilt::download_and_link() {
+            eprintln!("Prebuilt download failed: {e}");
+            std::process::exit(1);
+        }
+        return;
+    }
+
+    #[cfg(all(not(feature = "prebuilt"), feature = "vendored-depot"))]
+    {
+        println!("cargo:warning=Using vendored-depot strategy");
+        println!("cargo:warning=[BUILD.RS] Starting depot_build::build_with_depot_tools()");
+        match depot_build::build_with_depot_tools() {
+            Ok(_) => {
+                println!("cargo:warning=[BUILD.RS] depot_build completed successfully");
+            }
+            Err(e) => {
+                println!("cargo:warning=[BUILD.RS] depot_tools build failed: {}", e);
+                println!("cargo:warning=[BUILD.RS] Error details: {:?}", e);
+                std::process::exit(1);
+            }
+        }
+        return;
+    }
+
+    #[cfg(all(
+        not(feature = "prebuilt"),
+        not(feature = "vendored-depot"),
+        feature = "vendored"
+    ))]
+    {
+        println!("cargo:warning=Using vendored strategy");
+        if let Err(e) = run() {
+            eprintln!("Build failed: {e}");
+            std::process::exit(1);
+        }
+    }
+
+    // No feature selected - auto-select based on platform
+    #[cfg(not(any(feature = "vendored", feature = "vendored-depot", feature = "prebuilt")))]
+    {
+        println!("cargo:warning=No build strategy specified, auto-selecting based on platform");
+
+        let target = std::env::var("TARGET").unwrap_or_default();
+
+        if target.contains("windows") {
+            // Windows requires depot_tools for proper build
+            println!("cargo:warning=Auto-selected vendored-depot strategy for Windows");
+            if let Err(e) = depot_build::build_with_depot_tools() {
+                eprintln!("depot_tools build failed: {e}");
+                std::process::exit(1);
+            }
+        } else {
+            // Linux/macOS/iOS/Android can all use vendored (standalone tools)
+            println!(
+                "cargo:warning=Auto-selected vendored strategy for {}",
+                target
+            );
+            if let Err(e) = run() {
+                eprintln!("Build failed: {e}");
+                std::process::exit(1);
+            }
+        }
     }
 }
 
+#[cfg(any(
+    feature = "vendored",
+    not(any(feature = "vendored", feature = "vendored-depot", feature = "prebuilt"))
+))]
 fn run() -> Result<(), Box<dyn std::error::Error>> {
     // Load platform configuration
     let config = BuildConfig::from_env()?;
@@ -92,13 +187,27 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     println!("cargo:rerun-if-changed=crashpad_wrapper.cc");
 
     // Execute all build phases in order
-    phases.prepare()?; // Phase 1: prepare build tools
-    phases.configure()?; // Phase 2: GN configuration
-    phases.build()?; // Phase 3: Ninja build
-    phases.wrapper()?; // Phase 4: Wrapper compilation
-    phases.package()?; // Phase 5: Static library creation
-    phases.bindgen()?; // Phase 6: FFI bindings generation
-    phases.emit_link()?; // Phase 7: Cargo link metadata
+    phases
+        .prepare()
+        .map_err(|e| format!("Phase 1 (prepare) failed: {e}"))?;
+    phases
+        .configure()
+        .map_err(|e| format!("Phase 2 (configure) failed: {e}"))?;
+    phases
+        .build()
+        .map_err(|e| format!("Phase 3 (build) failed: {e}"))?;
+    phases
+        .wrapper()
+        .map_err(|e| format!("Phase 4 (wrapper) failed: {e}"))?;
+    phases
+        .package()
+        .map_err(|e| format!("Phase 5 (package) failed: {e}"))?;
+    phases
+        .bindgen()
+        .map_err(|e| format!("Phase 6 (bindgen) failed: {e}"))?;
+    phases
+        .emit_link()
+        .map_err(|e| format!("Phase 7 (emit_link) failed: {e}"))?;
 
     Ok(())
 }

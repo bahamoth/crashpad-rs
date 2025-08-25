@@ -24,10 +24,14 @@ dirs = "5.0"
 serde_json = "1.0"
 shellexpand = "3.1"
 ureq = "2.9"
+which = "6.0"
 zip = "0.6"
 
 [features]
-default = []
+default = []          # Empty - user must choose
+vendored = []         # Build from source using standalone tools
+vendored-depot = []   # Build from source using depot_tools
+prebuilt = []         # Download pre-built binaries
 
 [package.metadata.docs.rs]
 # Don't build or show dependencies' documentation

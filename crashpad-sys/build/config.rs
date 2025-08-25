@@ -1,8 +1,5 @@
-/// Platform configuration management
-///
-/// This module centralizes all platform-specific build settings.
-/// It detects the target platform and configures all necessary build parameters
-/// in one place, ensuring consistency between GN args and compiler flags.
+#![allow(dead_code)]
+
 use std::collections::HashMap;
 use std::env;
 use std::path::PathBuf;
@@ -19,11 +16,15 @@ pub struct BuildConfig {
     // Paths
     pub crashpad_dir: PathBuf,
 
-    // Platform-specific unified settings
+    // Compiler settings (for wrapper compilation with cc crate)
     pub compiler: PathBuf,
     pub archiver: String,
     pub cxx_flags: Vec<String>,
+
+    // GN build settings (only for vendored build, not depot_tools)
     pub gn_args: HashMap<String, String>,
+
+    // Linking settings (always needed)
     pub link_libs: Vec<String>,
     pub crashpad_libs: Vec<String>, // Crashpad static libraries to link
     pub frameworks: Vec<String>,    // iOS/macOS only
@@ -81,13 +82,10 @@ impl BuildConfig {
             .to_string(),
         );
 
-        // Disable tests since we don't need them and they require additional dependencies
+        // Disable tests (even though it shows a warning, it still works)
         config
             .gn_args
             .insert("crashpad_build_tests".to_string(), "false".to_string());
-        config
-            .gn_args
-            .insert("crashpad_build_test_data".to_string(), "false".to_string());
 
         // Platform-specific configuration
         if target.contains("android") {
@@ -101,7 +99,7 @@ impl BuildConfig {
         } else if target.contains("linux") {
             config.setup_linux(&target);
         } else {
-            return Err(format!("Unsupported target: {target}").into());
+            return Err(format!("Unsupported target: {target}. Supported targets: android, ios, darwin, windows-msvc, linux").into());
         }
 
         Ok(config)
@@ -122,7 +120,10 @@ impl BuildConfig {
         } else if target.starts_with("i686") {
             ("x86", "i686-linux-android", 21)
         } else {
-            return Err(format!("Unsupported Android architecture: {target}").into());
+            return Err(format!(
+                "Unsupported Android architecture: {target}. Supported: aarch64, x86_64, armv7, i686"
+            )
+            .into());
         };
 
         // Compiler path (dynamic, not hardcoded)
@@ -134,7 +135,10 @@ impl BuildConfig {
         } else if cfg!(target_os = "windows") {
             "windows-x86_64"
         } else {
-            return Err("Unsupported host platform for Android NDK".into());
+            return Err(
+                "Unsupported host platform for Android NDK. Supported: macOS, Linux, Windows"
+                    .into(),
+            );
         };
 
         self.compiler = ndk
@@ -277,25 +281,69 @@ impl BuildConfig {
 
     /// Configure for Windows
     fn setup_windows(&mut self, target: &str) -> Result<(), Box<dyn std::error::Error>> {
+        if !target.contains("msvc") {
+            return Err(
+                "Only MSVC target is supported for Windows. MinGW is not supported because Crashpad requires Windows SDK features."
+                    .into(),
+            );
+        }
+
         let arch = if target.starts_with("x86_64") {
             "x64"
         } else if target.starts_with("i686") {
             "x86"
         } else {
-            return Err(format!("Unsupported Windows architecture: {target}").into());
+            return Err(format!(
+                "Unsupported Windows architecture: {target}. Supported: x86_64, i686"
+            )
+            .into());
         };
 
+        // GN build configuration
         self.gn_args
             .insert("target_os".to_string(), "\"win\"".to_string());
         self.gn_args
             .insert("target_cpu".to_string(), format!("\"{arch}\""));
 
-        // For cross-compilation from Linux
-        if !target.contains("msvc") {
-            // MinGW settings
-            self.compiler = PathBuf::from("x86_64-w64-mingw32-g++");
-            self.archiver = "x86_64-w64-mingw32-ar".to_string();
+        // Use dynamic CRT (/MD) to match Rust's default
+        // This prevents LNK2038 runtime library mismatch errors
+        self.gn_args
+            .insert("is_component_build".to_string(), "false".to_string());
+        self.gn_args
+            .insert("use_custom_libcxx".to_string(), "false".to_string());
+
+        // Force dynamic runtime
+        if self.profile == "release" {
+            self.gn_args
+                .insert("extra_cflags".to_string(), "\"/MD\"".to_string());
+        } else {
+            self.gn_args
+                .insert("extra_cflags".to_string(), "\"/MDd\"".to_string());
         }
+
+        // Compiler configuration
+        self.compiler = PathBuf::from("cl.exe");
+        self.archiver = "lib".to_string();
+
+        // CC flags for wrapper compilation
+        // Note: cc crate handles most flags automatically
+        self.cxx_flags = vec![];
+
+        // Linking configuration
+        self.link_libs = vec![
+            "advapi32".to_string(),
+            "kernel32".to_string(),
+            "user32".to_string(),
+            "winmm".to_string(),
+        ];
+
+        // Crashpad libraries
+        self.crashpad_libs = vec![
+            "client".to_string(),
+            "common".to_string(),
+            "util".to_string(),
+            "base".to_string(),
+        ];
 
         Ok(())
     }
@@ -316,6 +364,16 @@ impl BuildConfig {
             .insert("target_os".to_string(), "\"linux\"".to_string());
         self.gn_args
             .insert("target_cpu".to_string(), format!("\"{arch}\""));
+
+        // Set compiler
+        self.compiler = PathBuf::from("clang++");
+
+        // Add target triple for cross-compilation
+        let host = env::var("HOST").unwrap_or_default();
+        if !host.is_empty() && host != target {
+            // Cross-compiling: add target triple
+            self.cxx_flags.push(format!("--target={}", target));
+        }
 
         // Add PIC flag for Linux
         self.cxx_flags.push("-fPIC".to_string());
@@ -370,7 +428,7 @@ impl BuildConfig {
             }
         }
 
-        Err("Android NDK not found. Please set ANDROID_NDK_HOME or install cargo-ndk".into())
+        Err("Android NDK not found. Please set ANDROID_NDK_HOME environment variable or install cargo-ndk (cargo install cargo-ndk)".into())
     }
 
     /// Get build directory for current platform
