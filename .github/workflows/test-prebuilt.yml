@@ -20,16 +20,12 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          submodules: recursive
+        # Note: submodules not needed for prebuilt (uses vendored-depot which fetches via depot_tools)
       
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: stable
-      
-      - name: Setup Rust cache
-        uses: Swatinem/rust-cache@v2
       
       - name: Setup Python (for depot_tools)
         uses: actions/setup-python@v4
