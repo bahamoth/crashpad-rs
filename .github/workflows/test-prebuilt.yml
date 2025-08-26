@@ -13,6 +13,9 @@ on:
         required: false
         default: 'test-prebuilt'
 
+permissions:
+  contents: write  # Required for creating releases
+
 jobs:
   build-windows-prebuilt:
     runs-on: windows-latest
