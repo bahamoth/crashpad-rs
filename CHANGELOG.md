@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.2.6](https://github.com/bahamoth/crashpad-rs/compare/v0.2.5...v0.2.6) (2025-08-26)
+
+
+### Features
+
+* add Windows build support for crashpad-rs ([e2c895c](https://github.com/bahamoth/crashpad-rs/commit/e2c895cd5d249920258daec0bea02c7d950f1368))
+* implement prebuilt support for Windows ([91596fd](https://github.com/bahamoth/crashpad-rs/commit/91596fd467c63ae88c86659f512811dbdbd98a39))
+
+
+### Bug Fixes
+
+* **ci:** fix GitHub token authentication for update-deps workflow ([18cfd3c](https://github.com/bahamoth/crashpad-rs/commit/18cfd3caa8f0443b352db716b740181517611e67))
+
 ## [0.2.5](https://github.com/bahamoth/crashpad-rs/compare/v0.2.4...v0.2.5) (2025-08-19)
 
 
