@@ -20,7 +20,7 @@ vendored-depot = ["crashpad-rs-sys/vendored-depot"]
 prebuilt = ["crashpad-rs-sys/prebuilt"]
 
 [dependencies]
-crashpad-rs-sys = { path = "../crashpad-sys", version = "0.2.5" }
+crashpad-rs-sys = { path = "../crashpad-sys", version = "0.2.6" }
 thiserror = { workspace = true }
 
 [dev-dependencies]
