@@ -146,11 +146,60 @@ cargo nextest run
 
 ## Building
 
+### Build Strategies
+
+The project supports three build strategies to handle platform differences:
+
+| Feature | Description | Platforms | Requirements |
+|---------|-------------|-----------|--------------|
+| `vendored` | Uses bundled GN/Ninja binaries | Linux, macOS, iOS, Android | None (default) |
+| `vendored-depot` | Uses Google's depot_tools | Windows | Python 3.8+ |
+| `prebuilt` | Uses pre-compiled binaries | All | Network access to GitHub |
+
+#### Platform × Features Compatibility Matrix
+
+| Platform | `vendored` | `vendored-depot` | `prebuilt` | Notes |
+|----------|------------|------------------|------------|-------|
+| Linux x86_64 | ✅ Tested | ❓ Untested | ✅ Tested | Default: vendored |
+| Linux aarch64 | ✅ Tested | ❓ Untested | ✅ Tested | Default: vendored |
+| macOS x86_64 | ✅ Tested | ❓ Untested | ✅ Tested | Default: vendored |
+| macOS aarch64 | ✅ Tested | ❓ Untested | ✅ Tested | Default: vendored |
+| Windows x86_64 | ❌ Not supported | ✅ Tested | ✅ Tested | Requires depot_tools |
+| iOS arm64 | ✅ Tested | ❓ Untested | ✅ Tested | In-process handler |
+| iOS Simulator | ✅ Tested | ❓ Untested | ✅ Tested | In-process handler |
+| Android arm | ✅ Tested | ❓ Untested | ✅ Tested | Requires cargo-ndk on macOS |
+| Android arm64 | ✅ Tested | ❓ Untested | ✅ Tested | Requires cargo-ndk on macOS |
+| Android x86 | ✅ Tested | ❓ Untested | ✅ Tested | Emulator builds |
+| Android x86_64 | ✅ Tested | ❓ Untested | ✅ Tested | Emulator builds |
+
+**Legend:**
+- ✅ **Tested**: Actively tested in CI or verified working
+- ❓ **Untested**: Should work theoretically but not verified
+- ❌ **Not supported**: Known to not work or incompatible
+
+#### Why Different Strategies?
+
+- **vendored**: Direct download of GN/Ninja binaries works on Unix-like systems
+- **vendored-depot**: Windows requires depot_tools due to complex Visual Studio integration
+- **prebuilt**: Useful for CI/CD to avoid building from source
+
+#### Platform-Specific Notes
+
+- **Windows**: Only supports `vendored-depot` and `prebuilt` strategies. The `vendored` strategy doesn't work due to Visual Studio toolchain requirements.
+- **Android on macOS**: Must use `cargo-ndk` for cross-compilation. Direct `cargo build --target` will fail with linker errors.
+- **iOS/tvOS/watchOS**: Uses in-process handler, no external executable needed.
+- **Linux/macOS**: All strategies theoretically work, but only `vendored` and `prebuilt` are actively tested.
+
 ### Native Build
 
 ```bash
-# Build the FFI layer (note: package name is crashpad-rs-sys)
+# Build with default strategy (auto-detected by platform)
 cargo build --package crashpad-rs-sys
+
+# Build with specific strategy
+cargo build --package crashpad-rs-sys --features vendored
+cargo build --package crashpad-rs-sys --features vendored-depot
+cargo build --package crashpad-rs-sys --features prebuilt
 
 # Build the safe wrapper
 cargo build --package crashpad-rs
@@ -172,6 +221,26 @@ just clean
 cargo clean
 rm -rf target/ ~/.cache/crashpad-build-tools
 ```
+
+### Using Prebuilt Binaries
+
+Prebuilt binaries are available from GitHub Releases for faster builds:
+
+```bash
+# Use prebuilt binaries (downloads from GitHub)
+cargo build --package crashpad-rs-sys --features prebuilt
+
+# Build and create prebuilt archive for distribution
+cargo xtask build-prebuilt --target x86_64-unknown-linux-gnu
+
+# Test prebuilt locally
+cargo build --features prebuilt --example crashpad_test_cli
+```
+
+Prebuilt archives include:
+- Pre-compiled static libraries
+- Generated Rust bindings
+- Crashpad handler executable (except iOS)
 
 ### What's happening in the Build?
 
@@ -267,9 +336,14 @@ rustup target add armv7-linux-androideabi
 rustup target add x86_64-linux-android
 
 # Build for specific architectures
-cargo ndk -t arm64-v8a build --package crashpad-rs-sys
-cargo ndk -t armeabi-v7a build --package crashpad-rs-sys
-cargo ndk -t x86_64 build --package crashpad-rs-sys
+# IMPORTANT: On macOS, you MUST use cargo-ndk to avoid linker conflicts
+# Direct cargo build --target will fail with linker errors
+cargo ndk -t arm64-v8a build --features vendored --package crashpad-rs-sys
+cargo ndk -t armeabi-v7a build --features vendored --package crashpad-rs-sys
+cargo ndk -t x86_64 build --features vendored --package crashpad-rs-sys
+
+# Note: Always specify --features vendored for Android builds
+# Otherwise the build system may incorrectly detect the host platform
 ```
 
 ### Linux (from macOS)
@@ -282,7 +356,11 @@ cross build --target x86_64-unknown-linux-gnu
 
 ### Windows
 
-**Note: Windows builds are currently untested and may not work.**
+```bash
+# Windows uses vendored-depot strategy (requires Python for depot_tools)
+cargo build --package crashpad-rs-sys --features vendored-depot
+cargo build --package crashpad-rs
+```
 
 ## Testing
 

@@ -7,6 +7,7 @@
 [![Build Status](https://github.com/bahamoth/crashpad-rs/actions/workflows/test-ios.yml/badge.svg)](https://github.com/bahamoth/crashpad-rs/actions/workflows/test-ios.yml)
 [![Build Status](https://github.com/bahamoth/crashpad-rs/actions/workflows/test-macos.yml/badge.svg)](https://github.com/bahamoth/crashpad-rs/actions/workflows/test-macos.yml)
 [![Build Status](https://github.com/bahamoth/crashpad-rs/actions/workflows/test-linux.yml/badge.svg)](https://github.com/bahamoth/crashpad-rs/actions/workflows/test-linux.yml)
+[![Build Status](https://github.com/bahamoth/crashpad-rs/actions/workflows/test-windows.yml/badge.svg)](https://github.com/bahamoth/crashpad-rs/actions/workflows/test-windows.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 Rust bindings for Google Crashpad crash reporting system.
