@@ -184,6 +184,14 @@ pub fn build_prebuilt(sh: &Shell, target: Option<String>) -> Result<()> {
                 lib_files.push(("util/libmig_output.a", "libmig_output.a"));
             }
 
+            // Add iOS-specific libraries for in-process handler
+            if t.contains("ios") {
+                lib_files.push(("snapshot/libsnapshot.a", "libsnapshot.a"));
+                lib_files.push(("snapshot/libcontext.a", "libcontext.a"));
+                lib_files.push(("minidump/libminidump.a", "libminidump.a"));
+                lib_files.push(("handler/libhandler.a", "libhandler.a"));
+            }
+
             for (src_path, dest_name) in lib_files {
                 let lib_src = crashpad_build_dir.join(src_path);
                 if lib_src.exists() {
@@ -203,11 +211,23 @@ pub fn build_prebuilt(sh: &Shell, target: Option<String>) -> Result<()> {
                     "crashpad_handler"
                 };
 
-                let handler_src = workspace_root
-                    .join("target")
-                    .join(&target)
-                    .join("release")
-                    .join(handler_name);
+                // Handler location varies by platform
+                let handler_src = if t.contains("android") {
+                    // Android: handler is in release directory with .so extension
+                    workspace_root
+                        .join("target")
+                        .join(&target)
+                        .join("release")
+                        .join(handler_name)
+                } else {
+                    // Others: handler is in crashpad_build directory
+                    workspace_root
+                        .join("target")
+                        .join(&target)
+                        .join("release")
+                        .join("crashpad_build")
+                        .join(handler_name)
+                };
 
                 if handler_src.exists() {
                     let handler_dest = prebuilt_dir.join(handler_name);

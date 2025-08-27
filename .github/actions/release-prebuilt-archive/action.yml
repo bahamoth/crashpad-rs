@@ -1,0 +1,105 @@
+name: 'Release Prebuilt Archive'
+description: 'Build and release prebuilt archive for crashpad-rs to GitHub Release'
+
+inputs:
+  target:
+    description: 'Rust target triple (e.g., x86_64-pc-windows-msvc)'
+    required: true
+  version:
+    description: 'Package version (e.g., 0.2.6)'
+    required: true
+  tag_name:
+    description: 'Git tag name (e.g., v0.2.6)'
+    required: true
+  needs_ndk:
+    description: 'Whether Android NDK is needed'
+    required: false
+    default: 'false'
+
+runs:
+  using: "composite"
+  steps:
+    - name: Setup Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        toolchain: stable
+        target: ${{ inputs.target }}
+        
+    - name: Setup Python for Windows depot_tools
+      if: contains(inputs.target, 'windows')
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+        
+    - name: Install Linux dependencies
+      if: contains(inputs.target, 'linux') && !contains(inputs.target, 'android')
+      shell: bash
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y build-essential clang
+        
+    - name: Setup Android NDK
+      if: inputs.needs_ndk == 'true'
+      uses: nttld/setup-ndk@v1
+      id: ndk
+      with:
+        ndk-version: r27c
+        
+    - name: Install cargo-ndk
+      if: inputs.needs_ndk == 'true'
+      shell: bash
+      run: cargo install cargo-ndk
+        
+    - name: Create NDK symlinks
+      if: inputs.needs_ndk == 'true'
+      shell: bash
+      run: |
+        cd ${{ steps.ndk.outputs.ndk-path }}/toolchains/llvm/prebuilt/linux-x86_64/bin
+        ln -sf aarch64-linux-android21-clang aarch64-linux-android-clang
+        ln -sf aarch64-linux-android21-clang++ aarch64-linux-android-clang++
+        ln -sf llvm-ar aarch64-linux-android-ar
+        
+    - name: Install iOS target
+      if: contains(inputs.target, 'ios')
+      shell: bash
+      run: rustup target add ${{ inputs.target }}
+        
+    - name: Build prebuilt archive
+      shell: bash
+      env:
+        ANDROID_NDK_HOME: ${{ steps.ndk.outputs.ndk-path }}
+      run: |
+        echo "🔨 Building prebuilt for ${{ inputs.target }} v${{ inputs.version }}"
+        if [ "${{ inputs.needs_ndk }}" = "true" ]; then
+          echo "Using Android NDK at: $ANDROID_NDK_HOME"
+        fi
+        cargo xtask build-prebuilt --target ${{ inputs.target }}
+        
+    - name: Verify archives exist
+      shell: bash
+      run: |
+        ARCHIVE="crashpad-${{ inputs.version }}-${{ inputs.target }}.tar.gz"
+        CHECKSUM="${ARCHIVE}.sha256"
+        
+        ls -la target/prebuilt-archives/
+        
+        if [[ ! -f "target/prebuilt-archives/$ARCHIVE" ]]; then
+          echo "❌ Archive not found: $ARCHIVE"
+          exit 1
+        fi
+        
+        if [[ ! -f "target/prebuilt-archives/$CHECKSUM" ]]; then
+          echo "❌ Checksum not found: $CHECKSUM"
+          exit 1
+        fi
+        
+        echo "✅ Archives ready for upload"
+        
+    - name: Upload to GitHub Release
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: ${{ inputs.tag_name }}
+        files: |
+          target/prebuilt-archives/crashpad-${{ inputs.version }}-${{ inputs.target }}.tar.gz
+          target/prebuilt-archives/crashpad-${{ inputs.version }}-${{ inputs.target }}.tar.gz.sha256
+        fail_on_unmatched_files: true

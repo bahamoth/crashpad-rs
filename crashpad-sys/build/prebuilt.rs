@@ -182,6 +182,13 @@ fn setup_link_flags(cache_dir: &Path, target: &str) -> Result<(), Box<dyn std::e
         println!("cargo:rustc-link-lib=static=format");
         println!("cargo:rustc-link-lib=static=base");
         println!("cargo:rustc-link-lib=static=mig_output");
+
+        // iOS-specific libraries for in-process handler
+        if target.contains("ios") {
+            println!("cargo:rustc-link-lib=static=snapshot");
+            println!("cargo:rustc-link-lib=static=context");
+            println!("cargo:rustc-link-lib=static=minidump");
+        }
     } else {
         // Linux/Android
         println!("cargo:rustc-link-lib=static=crashpad_wrapper");
@@ -212,6 +219,10 @@ fn setup_link_flags(cache_dir: &Path, target: &str) -> Result<(), Box<dyn std::e
         println!("cargo:rustc-link-lib=framework=IOKit");
         println!("cargo:rustc-link-lib=dylib=bsm");
         println!("cargo:rustc-link-lib=c++");
+    } else if target.contains("android") {
+        // Android uses libc++ instead of libstdc++
+        println!("cargo:rustc-link-lib=c++_static");
+        println!("cargo:rustc-link-lib=c++abi");
     } else {
         println!("cargo:rustc-link-lib=stdc++");
         println!("cargo:rustc-link-lib=pthread");
