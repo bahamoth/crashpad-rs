@@ -295,25 +295,25 @@ fn copy_handler_to_target(
         return Ok(());
     }
 
-    // Determine target directory based on cross-compilation
+    // Determine target directory: prefer CARGO_TARGET_DIR else workspace target/
     let host = env::var("HOST").unwrap_or_else(|_| target.to_string());
     let is_cross_compile = host != target;
     let profile = env::var("PROFILE").unwrap_or_else(|_| "debug".to_string());
     let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR")?);
 
-    let target_dir = if is_cross_compile {
-        manifest_dir
-            .parent()
-            .ok_or("Failed to get parent directory")?
-            .join("target")
-            .join(target)
-            .join(&profile)
+    let root = if let Ok(dir) = env::var("CARGO_TARGET_DIR") {
+        PathBuf::from(dir)
     } else {
         manifest_dir
             .parent()
             .ok_or("Failed to get parent directory")?
             .join("target")
-            .join(&profile)
+    };
+
+    let target_dir = if is_cross_compile {
+        root.join(target).join(&profile)
+    } else {
+        root.join(&profile)
     };
 
     fs::create_dir_all(&target_dir)?;
@@ -347,6 +347,8 @@ fn copy_handler_to_target(
         "cargo:rustc-env=CRASHPAD_HANDLER_PATH={}",
         handler_dest.display()
     );
+    // Expose handler path to dependents via DEP_<links>_HANDLER
+    println!("cargo:handler={}", handler_dest.display());
 
     Ok(())
 }

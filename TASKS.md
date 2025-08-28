@@ -59,12 +59,13 @@ Copy this template and increment the ID:
 | ID | Title | Status | Assignee | Links | Notes |
 |----|-------|--------|----------|-------|-------|
 | T-001 | Clean up build.rs formatting and spacing | DONE   | - | - | Refactor mentioned in recent commits |
-| T-002 | Add Windows build support and testing | DOING  | architect-vision | ARCHITECTURE.md | Windows platform listed but not fully implemented |
+| T-002 | Add Windows build support and testing | DONE   | architect-vision | ARCHITECTURE.md | Windows platform listed but not fully implemented |
 | T-003 | Create comprehensive FFI documentation | DONE   | - | wrapper.h | Document all exposed C++ functions |
 | T-004 | Implement Android NDK cross-compilation tests | DONE   | - | CROSS_COMPILE.md | Android support added but needs testing |
 | T-005 | Add CI/CD pipeline with GitHub Actions | DONE   | dev-codex | - | Build and test on all supported platforms |
 | T-006 | Refactor crashpad-sys build system for platform consistency | DONE   | architect-thor | build_refactor_plan.md | Unify platform-specific build configurations, fix compiler/linker mismatches |
-| T-007 | Implement flexible handler arguments API | DONE | architect-loki | handler-arguments-api-plan.md, R-009 | Add generic FFI support for passing any arguments to handler process |
+| T-007 | Implement flexible handler arguments API | DONE   | architect-loki | handler-arguments-api-plan.md, R-009 | Add generic FFI support for passing any arguments to handler process |
+| T-008 | Minimal crashpad-handler-bundler crate and handler bundling | REVIEW | dev-codex | docs/codex-handler-bundler-plan.md | Add bundler crate, support DEP_CRASHPAD_HANDLER/DEP_CRASHPAD_RS_HANDLER, atomic copy to target path, export CRASHPAD_HANDLER_PATH |
 
 ### Task Assignment History
 
@@ -75,6 +76,7 @@ Copy this template and increment the ID:
 | 2025-08-07 | T-005 | - | dev-codex | CI/CD pipeline work started |
 | 2025-08-13 | T-007 | - | architect-loki | Handler arguments API design and implementation |
 | 2025-08-19 | T-002 | - | architect-vision | Windows build support and testing |
+| 2025-08-28 | T-008 | - | dev-codex | Start minimal bundler implementation and docs |
 
 ## Related Documents
 

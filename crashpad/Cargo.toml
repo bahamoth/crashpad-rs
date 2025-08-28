@@ -12,6 +12,7 @@ documentation = "https://docs.rs/crashpad-rs"
 readme = { workspace = true }
 keywords = { workspace = true }
 categories = { workspace = true }
+links = "crashpad_rs"
 
 [features]
 # Forward build strategy features to crashpad-rs-sys

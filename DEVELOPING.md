@@ -211,6 +211,31 @@ cargo build --release
 cargo xtask dist
 ```
 
+### Handler Distribution
+
+The `crashpad_handler` executable is automatically copied to the target directory during build:
+
+```bash
+# When building crashpad-rs-sys
+cargo build -p crashpad-rs-sys
+# Output: cargo:warning=crashpad_handler copied to target/debug/crashpad_handler
+
+# Using the bundler in your own project
+# Add to build-dependencies:
+# crashpad-handler-bundler = "0.2.6"
+
+# In build.rs:
+fn main() {
+    crashpad_handler_bundler::bundle().expect("Failed to bundle handler");
+}
+```
+
+The handler is automatically:
+- Built from source (vendored) or downloaded (prebuilt)
+- Copied to `target/{debug,release}/crashpad_handler`
+- Given executable permissions on Unix
+- Named appropriately (`.exe` on Windows, `.so` on Android)
+
 ### Clean Build
 
 ```bash
@@ -682,13 +707,16 @@ crashpad-rs/
 │       ├── libfuzzer/    # Fuzzing
 │       ├── edo/          # iOS library
 │       └── lss/          # Linux syscalls
-├── crashpad/             # Safe Rust wrapper (publishes as crashpad)
+├── crashpad/             # Safe Rust wrapper (publishes as crashpad-rs)
 │   ├── src/
 │   │   ├── client.rs    # CrashpadClient implementation
 │   │   ├── config.rs    # Configuration builder
 │   │   └── lib.rs       # Public API
 │   ├── examples/         # Example programs
 │   └── tests/           # Integration tests
+├── crashpad-handler-bundler/ # Handler distribution utility (publishes as crashpad-handler-bundler)
+│   └── src/
+│       └── lib.rs       # Bundle handler to target directory at build time
 └── xtask/               # Development automation
 ```
 
@@ -702,6 +730,7 @@ The project uses different names for directories and crates.io packages:
 |-----------------|-------------------|----------------------------------------------------|
 | `crashpad-sys/` | `crashpad-rs-sys` | Avoids conflict with existing `crashpad-sys` crate |
 | `crashpad/`     | `crashpad-rs`     | Consistent naming with FFI package                 |
+| `crashpad-handler-bundler/` | `crashpad-handler-bundler` | Handler distribution utility |
 
 ### Publishing Process
 
@@ -733,6 +762,7 @@ The project uses different names for directories and crates.io packages:
    ```bash
    # Publish in dependency order
    cargo publish -p crashpad-rs-sys
+   cargo publish -p crashpad-handler-bundler
    cargo publish -p crashpad-rs
    ```
 

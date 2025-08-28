@@ -40,6 +40,21 @@ Add to your `Cargo.toml`:
 # x-release-please-start-version
 crashpad-rs = "0.2.6"
 # x-release-please-end-version
+
+# Optional: For automatic handler bundling at build time
+[build-dependencies]
+# x-release-please-start-version
+crashpad-handler-bundler = "0.2.6"
+# x-release-please-end-version
+```
+
+If using the bundler, create a `build.rs`:
+
+```rust
+fn main() {
+    // Automatically copy crashpad_handler to target directory
+    crashpad_handler_bundler::bundle().expect("Failed to bundle handler");
+}
 ```
 
 ## Quick Start
@@ -53,8 +68,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let client = CrashpadClient::new()?;
 
     // Configure crash reporting
+    // If using crashpad-handler-bundler, the handler path is available via env var
+    let handler_path = option_env!("CRASHPAD_HANDLER_PATH")
+        .unwrap_or("./crashpad_handler");
+    
     let config = CrashpadConfig::builder()
-        .handler_path("/path/to/crashpad_handler")  // Handler executable
+        .handler_path(handler_path)                 // Handler executable
         .database_path("./crashes")                 // Local crash storage
         .url("https://your-crash-server.com/submit") // Upload endpoint
         .build();
@@ -229,40 +248,19 @@ if let Err(e) = some_operation() {
 
 ### Running the Test Example
 
-1. **Build the example and handler**
-   ```bash
-   # Build everything including the handler
-   cargo build --example crashpad_test_cli
-   
-   # The handler will be at: target/debug/crashpad_handler
-   # The example will be at: target/debug/examples/crashpad_test_cli
-   ```
+The test example automatically searches for the handler in common locations.
 
-2. **Run with handler in same directory** (easiest)
    ```bash
-   # Copy handler to current directory
-   cp target/debug/crashpad_handler .
-   
-   # Run the example (will look for handler in current directory as fallback)
-   ./target/debug/examples/crashpad_test_cli
-   ```
-
-3. **Run with environment variable**
-   ```bash
-   # Set handler path explicitly
-   export CRASHPAD_HANDLER=target/debug/crashpad_handler
-   
-   # Run from anywhere
+   # Build and run directly
    cargo run --example crashpad_test_cli
+   
+   # The example will search for handler in:
+   # - target/debug/crashpad_handler (automatically found)
+   # - CRASHPAD_HANDLER environment variable (if set)
+   # - Current directory
    ```
 
-4. **Run directly with cargo** (if handler is in PATH or current directory)
-   ```bash
-   # If you have crashpad_handler in current directory or PATH
-   cargo run --example crashpad_test_cli
-   ```
-
-5. **Test the available commands**
+2. **Test the available commands**
    ```bash
    # Show help
    cargo run --example crashpad_test_cli -- --help
@@ -277,16 +275,71 @@ if let Err(e) = some_operation() {
    cargo run --example crashpad_test_cli -- test
    ```
 
-**Note**: The example looks for the handler in this order:
-
-1. Path specified in config (if provided)
-2. `CRASHPAD_HANDLER` environment variable
-3. Same directory as the executable (fallback)
-4. Current working directory (fallback)
 
 ### Handler Deployment
 
-The `crashpad_handler` executable must be available at runtime. Common approaches:
+The `crashpad_handler` executable must be available at runtime. There are two approaches:
+
+#### Automatic (Recommended)
+
+Use `crashpad-handler-bundler` to automatically copy the handler at build time:
+
+**1. Add to your `Cargo.toml`:**
+```toml
+[dependencies]
+crashpad-rs = "x.y.z"
+
+[build-dependencies]
+crashpad-handler-bundler = "x.y.z"
+```
+
+**2. Create `build.rs` in your project root:**
+```rust
+fn main() {
+    // Automatically copies handler to target directory
+    crashpad_handler_bundler::bundle().expect("Failed to bundle handler");
+}
+```
+
+**3. Use in your application:**
+```rust
+use crashpad_rs::{CrashpadClient, CrashpadConfig};
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let client = CrashpadClient::new()?;
+    
+    // Handler path is available via environment variable set by bundler
+    let handler_path = option_env!("CRASHPAD_HANDLER_PATH")
+        .unwrap_or("./crashpad_handler");
+    
+    let config = CrashpadConfig::builder()
+        .handler_path(handler_path)
+        .database_path("./crashes")
+        .build();
+    
+    client.start_with_config(&config, &Default::default())?;
+    Ok(())
+}
+```
+
+**4. Build and run:**
+```bash
+cargo build
+# Output: cargo:warning=crashpad_handler copied to /path/to/target/debug/crashpad_handler
+
+cargo run
+# Handler is automatically available
+```
+
+The bundler handles:
+- Finding the built handler from crashpad-rs-sys
+- Copying to the correct target directory
+- Setting executable permissions on Unix
+- Platform-specific naming (`.exe` on Windows, `.so` on Android)
+
+#### Manual Deployment
+
+If not using the bundler, you need to manually deploy the handler:
 
 1. **Same directory as application** (simplest)
    ```
@@ -308,7 +361,7 @@ The `crashpad_handler` executable must be available at runtime. Common approache
 4. **Bundled in package** (platform-specific)
     - macOS: Inside .app bundle
     - Linux: In AppImage or snap
-    - Android: As .so file in APK
+    - Android: As .so file in APK (renamed to `libcrashpad_handler.so`)
     - iOS: Not needed (in-process)
 
 ## Documentation

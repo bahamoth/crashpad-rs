@@ -1,0 +1,22 @@
+[package]
+name = "crashpad-handler-bundler"
+version = { workspace = true }
+authors = { workspace = true }
+edition = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+rust-version = { workspace = true }
+description = "Build-time utility to place crashpad_handler in a predictable target directory"
+homepage = { workspace = true }
+documentation = "https://docs.rs/crashpad-handler-bundler"
+readme = "README.md"
+keywords = ["crashpad", "bundler", "build-script"]
+categories = ["development-tools::build-utilities"]
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+
+[dev-dependencies]
+tempfile = "3"
