@@ -52,13 +52,15 @@ crashpad-handler-bundler = "0.2.6"
 
 ### Build Strategies
 
-The `crashpad-rs-sys` crate supports three build strategies:
+The `crashpad-rs-sys` crate supports three **mutually exclusive** build strategies:
 
 | Strategy | Description | Platform Support | Requirements |
 |----------|-------------|------------------|--------------|
 | `vendored` (default) | Builds from submodules with pinned versions | Linux, macOS, iOS, Android (❌ Windows) | Git submodules |
 | `vendored-depot` | Builds using Google's depot_tools with latest sources | All platforms (✅ Windows tested) | Python 3.8+, depot_tools |
 | `prebuilt` | Uses pre-compiled binaries from GitHub Releases | Linux (x86_64, aarch64), macOS (x86_64, aarch64), Windows (x86_64) | Network access |
+
+⚠️ **Important**: Only one strategy can be enabled at a time. These features are mutually exclusive.
 
 Choose a strategy by enabling the corresponding feature:
 
