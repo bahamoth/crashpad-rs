@@ -549,29 +549,22 @@ impl BuildPhases {
             return Ok(());
         }
 
-        // Calculate target directory
-        // Use HOST env var to determine if cross-compiling
-        // If HOST != TARGET, then we're cross-compiling
+        // Calculate target directory prefer CARGO_TARGET_DIR or fallback to workspace target/
         let host = env::var("HOST").unwrap_or_else(|_| self.config.target.clone());
-        let is_cross_compile = host != self.config.target;
-
-        let target_dir = if is_cross_compile {
-            // Cross-compilation - include target triple
-            self.config
-                .manifest_dir
-                .parent()
-                .ok_or("Failed to get parent directory")?
-                .join("target")
-                .join(&self.config.target)
-                .join(&self.config.profile)
+        let is_cross = host != self.config.target;
+        let root = if let Ok(dir) = env::var("CARGO_TARGET_DIR") {
+            PathBuf::from(dir)
         } else {
-            // Native build - use simple path
             self.config
                 .manifest_dir
                 .parent()
                 .ok_or("Failed to get parent directory")?
                 .join("target")
-                .join(&self.config.profile)
+        };
+        let target_dir = if is_cross {
+            root.join(&self.config.target).join(&self.config.profile)
+        } else {
+            root.join(&self.config.profile)
         };
 
         // Create directory if needed
@@ -603,6 +596,8 @@ impl BuildPhases {
             "cargo:rustc-env=CRASHPAD_HANDLER_PATH={}",
             handler_dest.display()
         );
+        // Expose handler path to dependents via DEP_<links>_HANDLER
+        println!("cargo:handler={}", handler_dest.display());
 
         Ok(())
     }

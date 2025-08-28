@@ -33,17 +33,6 @@ pub fn download_and_link() -> Result<(), Box<dyn std::error::Error>> {
         cache_dir.display()
     );
 
-    // Debug: List files in cache directory
-    if cache_dir.exists() {
-        println!("cargo:warning=Cache directory contents:");
-        for entry in fs::read_dir(&cache_dir)? {
-            let entry = entry?;
-            println!("cargo:warning=  - {}", entry.file_name().to_string_lossy());
-        }
-    } else {
-        println!("cargo:warning=Cache directory does not exist!");
-    }
-
     // Copy bindings.rs from cache
     let bindings_src = cache_dir.join("bindings.rs");
     let bindings_dst = out_dir.join("bindings.rs");
@@ -267,25 +256,43 @@ fn copy_handler_to_target(
         return Ok(());
     }
 
-    // Determine target directory
+    // Determine target directory honoring CARGO_TARGET_DIR and Cargo layout
     let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR")?);
     let profile = env::var("PROFILE").unwrap_or_else(|_| "debug".to_string());
     let host = env::var("HOST").unwrap_or_else(|_| target.to_string());
     let is_cross_compile = host != target;
 
-    let target_dir = if is_cross_compile {
-        manifest_dir
-            .parent()
-            .ok_or("Failed to get parent directory")?
-            .join("target")
-            .join(target)
-            .join(&profile)
+    let root = if let Ok(dir) = env::var("CARGO_TARGET_DIR") {
+        PathBuf::from(dir)
+    } else if let Ok(out) = env::var("OUT_DIR") {
+        let mut p = PathBuf::from(out);
+        for _ in 0..5 {
+            if p.file_name().map(|s| s == "target").unwrap_or(false) {
+                break;
+            }
+            if !p.pop() {
+                break;
+            }
+        }
+        if p.file_name().map(|s| s == "target").unwrap_or(false) {
+            p
+        } else {
+            manifest_dir
+                .parent()
+                .ok_or("Failed to get parent directory")?
+                .join("target")
+        }
     } else {
         manifest_dir
             .parent()
             .ok_or("Failed to get parent directory")?
             .join("target")
-            .join(&profile)
+    };
+
+    let target_dir = if is_cross_compile {
+        root.join(target).join(&profile)
+    } else {
+        root.join(&profile)
     };
 
     fs::create_dir_all(&target_dir)?;
@@ -308,6 +315,8 @@ fn copy_handler_to_target(
         fs::set_permissions(&handler_dest, perms)?;
     }
 
+    // Expose handler path to dependents via DEP_<links>_HANDLER
+    println!("cargo:handler={}", handler_dest.display());
     eprintln!("Handler copied to target directory");
     Ok(())
 }

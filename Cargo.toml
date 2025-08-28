@@ -1,5 +1,5 @@
 [workspace]
-members = ["crashpad-sys", "crashpad", "xtask"]
+members = ["crashpad-sys", "crashpad", "xtask", "crashpad-handler-bundler"]
 default-members = ["crashpad-sys", "crashpad"]
 resolver = "2"
 
