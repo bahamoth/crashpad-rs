@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.7](https://github.com/bahamoth/crashpad-rs/compare/v0.2.6...v0.2.7) (2025-08-28)
+
+
+### Features
+
+* add crashpad-handler-bundler for automatic handler distribution ([a517250](https://github.com/bahamoth/crashpad-rs/commit/a51725052a8939b868c9d33d69c04b4e15d46bf8))
+
 ## [0.2.6](https://github.com/bahamoth/crashpad-rs/compare/v0.2.5...v0.2.6) (2025-08-27)
 
 
