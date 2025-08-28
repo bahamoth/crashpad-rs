@@ -40,13 +40,13 @@ Add to your `Cargo.toml`:
 ```toml
 [dependencies]
 # x-release-please-start-version
-crashpad-rs = "0.2.6"
+crashpad-rs = "0.2.7"
 # x-release-please-end-version
 
 # Optional: For automatic handler bundling at build time
 [build-dependencies]
 # x-release-please-start-version
-crashpad-handler-bundler = "0.2.6"
+crashpad-handler-bundler = "0.2.7"
 # x-release-please-end-version
 ```
 
