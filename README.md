@@ -26,10 +26,12 @@ Rust bindings for Google Crashpad crash reporting system.
 
 ## Features
 
-- **Cross-platform**: macOS, Linux, iOS, Android
+- **Cross-platform**: macOS, Linux, iOS, Android, Windows
 - **Safe API**: Rust-safe wrapper around Crashpad C++ library
 - **Flexible Configuration**: Runtime handler configuration
-- **(Native)Crash Handler Included**: Native Handler executable built-in
+- **Native Crash Handler Included**: Handler executable built-in
+- **Multiple Build Strategies**: Choose between source build or pre-compiled binaries
+- **Automatic Handler Distribution**: Optional bundler for seamless deployment
 
 ## Installation
 
@@ -47,6 +49,36 @@ crashpad-rs = "0.2.6"
 crashpad-handler-bundler = "0.2.6"
 # x-release-please-end-version
 ```
+
+### Build Strategies
+
+The `crashpad-rs-sys` crate supports three build strategies:
+
+| Strategy | Description | Platform Support | Requirements |
+|----------|-------------|------------------|--------------|
+| `vendored` (default) | Builds from submodules with pinned versions | Linux, macOS, iOS, Android (❌ Windows) | Git submodules |
+| `vendored-depot` | Builds using Google's depot_tools with latest sources | All platforms (✅ Windows tested) | Python 3.8+, depot_tools |
+| `prebuilt` | Uses pre-compiled binaries from GitHub Releases | Linux (x86_64, aarch64), macOS (x86_64, aarch64), Windows (x86_64) | Network access |
+
+Choose a strategy by enabling the corresponding feature:
+
+```toml
+# Use pre-compiled binaries (fastest build)
+crashpad-rs = { version = "0.2.6", features = ["prebuilt"] }
+
+# Use depot_tools for Windows builds
+crashpad-rs = { version = "0.2.6", features = ["vendored-depot"] }
+
+# Default: vendored (builds from submodules)
+crashpad-rs = "0.2.6"
+```
+
+**Note**: 
+- `vendored` is the default and recommended for most platforms except Windows
+- `vendored-depot` is required for Windows native builds
+- `prebuilt` provides fastest builds but requires pre-built archives for your platform
+
+### Handler Bundling (Optional)
 
 If using the bundler, create a `build.rs`:
 
@@ -380,10 +412,10 @@ If not using the bundler, you need to manually deploy the handler:
 
 ## Known Limitations
 
-- **Windows Support**: Not currently available (build system limitation)
 - **iOS Handler Arguments**: Handler arguments are ignored on iOS/tvOS/watchOS as the in-process handler uses hardcoded
   settings (Crashpad limitation, see [bug #23](https://crashpad.chromium.org/bug/23))
 - **Handler Update**: No automatic update mechanism for deployed handlers
+- **Windows vendored build**: The default `vendored` strategy doesn't support Windows; use `vendored-depot` or `prebuilt` instead
 
 Contributions are welcome!
 
