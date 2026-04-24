@@ -50,6 +50,8 @@ impl BuildPhases {
             self.create_dependency_links()?;
         }
 
+        self.patch_macos_iokit_default_port()?;
+
         Ok(())
     }
 
@@ -598,6 +600,29 @@ impl BuildPhases {
         );
         // Expose handler path to dependents via DEP_<links>_HANDLER
         println!("cargo:handler={}", handler_dest.display());
+
+        Ok(())
+    }
+
+    fn patch_macos_iokit_default_port(&self) -> Result<(), Box<dyn std::error::Error>> {
+        if !self.config.target.contains("darwin") {
+            return Ok(());
+        }
+
+        let mac_util = self.config.crashpad_dir.join("util/mac/mac_util.cc");
+        if !mac_util.exists() {
+            return Ok(());
+        }
+
+        let source = fs::read_to_string(&mac_util)?;
+        let needle = "IOServiceGetMatchingService(kIOMainPortDefault,";
+        if !source.contains(needle) {
+            return Ok(());
+        }
+
+        let replacement = "      // Passing MACH_PORT_NULL requests IOKit's default main port without\n      // depending on the macOS 12+ kIOMainPortDefault symbol.\n      IOServiceGetMatchingService(MACH_PORT_NULL,";
+        let patched = source.replacen(needle, replacement, 1);
+        fs::write(&mac_util, patched)?;
 
         Ok(())
     }
