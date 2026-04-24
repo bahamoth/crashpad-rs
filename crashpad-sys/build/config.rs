@@ -260,11 +260,20 @@ impl BuildConfig {
         } else {
             "x64"
         };
+        let host = env::var("HOST").unwrap_or_default();
 
         self.gn_args
             .insert("target_os".to_string(), "\"mac\"".to_string());
         self.gn_args
             .insert("target_cpu".to_string(), format!("\"{arch}\""));
+
+        // Cross toolchains such as osxcross already embed the target triple.
+        // Leave mini_chromium's deployment target unset there so GN does not
+        // force a conflicting -mmacosx-version-min value.
+        if !host.is_empty() && host != target {
+            self.gn_args
+                .insert("mac_deployment_target".to_string(), "\"\"".to_string());
+        }
 
         self.compiler = PathBuf::from("c++");
         self.archiver = "libtool".to_string();
